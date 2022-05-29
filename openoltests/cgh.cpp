@@ -8,7 +8,7 @@
 #include <omp.h>
 #include <chrono>
 #ifndef PROJECT_ROOT
-#define PROJECT_ROOT "/Users/somafujimori/codes/holo"
+#define PROJECT_ROOT
 #endif
 
 ///////
