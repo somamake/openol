@@ -1,0 +1,15 @@
+.vscode
+data
+*.o
+build
+out
+mov
+a.out
+.DS_Store
+*.bmp
+*.jpg
+.ipynb_checkpoints
+__pycache__
+*.cpython-38.pyc
+3ddata
+CMakeLists.txt
