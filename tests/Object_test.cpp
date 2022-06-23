@@ -16,7 +16,7 @@
 
 int main(){
     ol::Vect3<PREC_T> offset((float) (WIDTH / 2 * p),(float) (HEIGHT / 2 * p),1.0f);
-    char path3d[] = PROJECT_ROOT "/data/horn02-f000.3d";
+    
     std::chrono::system_clock::time_point  start, end;
     std::unique_ptr<PREC_T[]> phase = std::make_unique<PREC_T[]>(WIDTH * HEIGHT);
     auto img = std::make_unique<uint8_t[]>(WIDTH * HEIGHT);

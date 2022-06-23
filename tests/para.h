@@ -34,6 +34,8 @@ PREC_T d=-0.1 + 0;
 // PREC_T lambda = 633e-9;
 // PREC_T d=0.10+ 0;
 char path[] = PROJECT_ROOT "/out/olObject.bmp";
+char path3d[] = PROJECT_ROOT "/3ddata/horn02-f000.3d";
+// char path3d[] = PROJECT_ROOT "/3ddata/cube284.3d";
 #endif
 
 #ifdef RECT_TEST

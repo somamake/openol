@@ -11,10 +11,7 @@
 
 
 int main(){
-    char path3d[] = PROJECT_ROOT "/3ddata/horn02-f000.3d";
-    // char path3d[] = PROJECT_ROOT "/3ddata/hayabusa_7877/3d/hayabusa_7877_021.3d";
-    // char path3d[] = PROJECT_ROOT "/3ddata/tyrano_6215/3DF/10fps/tyrannoLow_010.3df";
-    // char path3d[] = PROJECT_ROOT "/data/cube284.3d";
+  
     ol::Vect3<PREC_T> offset((float) (WIDTH / 2 * p),(float) (HEIGHT / 2 * p),d);
     
     std::chrono::system_clock::time_point  start, end;
