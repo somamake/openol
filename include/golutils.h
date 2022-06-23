@@ -65,6 +65,27 @@ __global__ void KernelMult( thrust::complex<PREC_T>* a, thrust::complex<PREC_T>*
 	}	
 }
 
+template<typename PREC_T>
+__global__ void KernelAdd( thrust::complex<PREC_T>* a, thrust::complex<PREC_T>*b, thrust::complex<PREC_T>*c, int height, int width)
+{
+	//スレッド・ブロック番号を元にアドレス計算
+	int x = blockIdx.x*blockDim.x + threadIdx.x;
+    int y = blockIdx.y*blockDim.y + threadIdx.y;
+    unsigned int adr = (x+y*width);
+	if ( x < width && y < height){
+		c[adr] = a[adr] + b[adr];
+	}	
+}
+
+template<typename PREC_T=float>
+void add( cuda::unique_ptr<thrust::complex<PREC_T>[]>& u1,cuda::unique_ptr<thrust::complex<PREC_T>[]>& u2,cuda::unique_ptr<thrust::complex<PREC_T>[]>& udst, int height, int width)
+{
+	dim3 block(16, 16, 1);
+	dim3 grid(ceil((float)width / block.x), ceil((float)height / block.y), 1);
+	KernelAdd<<<grid,block>>>(u1.get(),u2.get(),udst.get(),height,width);
+	cudaDeviceSynchronize();
+}
+
 template<typename PREC_T=float>
 __global__ void mul_scalar( thrust::complex<PREC_T>* u,PREC_T scalar, int height, int width)
 {
@@ -287,6 +308,110 @@ void gexpand(cuda::unique_ptr<_Tp[]>& src, cuda::unique_ptr<_Tp[]>& dst,int in_n
 	}
     dst = std::move(tmp);
 	cudaDeviceSynchronize();
+}
+
+
+template<typename _Tp,typename PREC_T>
+__device__ void bilinear(_Tp* src,_Tp& dst, PREC_T dsty,PREC_T dstx,int64_t ny, int64_t nx){
+    // 双一次補間
+    _Tp U1;
+    _Tp U2;
+	
+
+    int64_t ms = floor(dstx); int64_t ns = floor(dsty);
+    if ( 0 <= ms && ms < (nx - 1) && 0 <= ns && ns < (ny - 1)){
+        float s = dstx- ms; float t = dsty - ns;
+        U1 = (1 - s) * src[ms + ns * nx] + s * src[ (ms + 1) + ns * nx];
+        U2 = (1 - s) * src[ms + (ns + 1) * nx] + s * src[ (ms + 1) + (ns + 1) * nx];
+
+        dst = (1 - t) * U1 + t * U2;
+    }
+    else if(0 <= ms && ms < nx && 0 <= ns && ns < ny){
+        dst =  src[ms + ns * nx];
+    }
+    else{
+        dst = 0;
+    }
+}
+
+
+// srcとdstのサイズは整数倍でなくてよい
+template<typename _Tp>
+__global__ void interpolatelinear(_Tp* src, _Tp* dst,int64_t in_ny, int64_t in_nx,int64_t out_ny,int64_t out_nx){
+
+	int m = blockIdx.x*blockDim.x + threadIdx.x;
+    int n = blockIdx.y*blockDim.y + threadIdx.y;
+	if (m >= out_nx || n >= out_ny){
+		return;
+	}
+    float xscale = (float)out_nx / in_nx;
+    float yscale = (float)out_ny / in_ny; 
+
+	float dstx = m / xscale; 
+	float dsty = n / yscale;
+	bilinear(src,dst[n * out_nx + m],dsty,dstx,in_ny,in_nx);
+}
+
+template<typename _Tp>
+void interpolatelinear(cuda::unique_ptr<_Tp[]>& src, cuda::unique_ptr<_Tp[]>& dst,int64_t in_ny, int64_t in_nx,int64_t out_ny,int64_t out_nx){
+    cuda::unique_ptr<_Tp[]> tmp;
+    if (src == dst || (void*)dst.get() == NULL ){
+		tmp = cuda::make_unique<_Tp[]>(out_ny * out_nx);
+	}
+	else{
+		tmp = std::move(dst);
+	}
+	dim3 block(16, 16, 1);
+	dim3 grid(ceil((float)out_nx / block.x), ceil((float)out_ny / block.y), 1);
+	interpolatelinear<<<grid,block>>>(src.get(),tmp.get(),in_ny,in_nx,out_ny,out_nx);
+    
+    if (src == dst){
+		src.reset();
+	}
+    dst = std::move(tmp);
+}
+
+// srcとdstのサイズは整数倍でなくてよい
+template<typename _Tp>
+__global__ void NearestNeighborInterpolation(_Tp* src, _Tp* dst,int64_t in_ny, int64_t in_nx,int64_t out_ny,int64_t out_nx){
+
+	int m = blockIdx.x*blockDim.x + threadIdx.x;
+    int n = blockIdx.y*blockDim.y + threadIdx.y;
+	if (m >= out_nx || n >= out_ny){
+		return;
+	}
+    float xscale = (float)out_nx / in_nx;
+    float yscale = (float)out_ny / in_ny; 
+
+	float dstx = m / xscale; 
+	float dsty = n / yscale;
+	int64_t ms = round(dstx); int64_t ns = round(dsty);
+    if(0 <= ms && ms < in_nx && 0 <= ns && ns < in_ny){
+        dst[m + n * out_nx] =  src[ms + ns * in_nx];
+		// dst = 0;
+    }
+    else{
+        dst = 0;
+    }
+}
+
+template<typename _Tp>
+void NearestNeighborInterpolation(cuda::unique_ptr<_Tp[]>& src, cuda::unique_ptr<_Tp[]>& dst,int64_t in_ny, int64_t in_nx,int64_t out_ny,int64_t out_nx){
+    cuda::unique_ptr<_Tp[]> tmp;
+    if (src == dst || (void*)dst.get() == NULL ){
+		tmp = cuda::make_unique<_Tp[]>(out_ny * out_nx);
+	}
+	else{
+		tmp = std::move(dst);
+	}
+	dim3 block(16, 16, 1);
+	dim3 grid(ceil((float)out_nx / block.x), ceil((float)out_ny / block.y), 1);
+	NearestNeighborInterpolation<<<grid,block>>>(src.get(),tmp.get(),in_ny,in_nx,out_ny,out_nx);
+    
+    if (src == dst){
+		src.reset();
+	}
+    dst = std::move(tmp);
 }
 
 }

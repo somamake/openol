@@ -149,8 +149,96 @@ void gFresnelProp(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& u,
 	mul_scalar<<<grid,block>>>(buf2.get(),(COMPLEX_T) (1.0f / (ny2 * nx2)),ny2,nx2);
 	//複素乗算
 	KernelMult<<< grid, block>>>(buf1.get(), buf2.get(), buf1.get(), ny2, nx2);
+	// gfftshift(buf1,ny2,nx2);
 	//逆FFT
 	cufftExecC2C(fftplan, (cufftComplex*)buf1.get(), (cufftComplex*)buf1.get(), CUFFT_INVERSE);
+	// gfftshift(buf1,ny2,nx2);
+	
+	gdel_zero<<< grid, block >>>(buf1.get(),u.get(),ny2,nx2);
+	grid = dim3(ceil((float)nx / block.x), ceil((float)ny / block.y), 1);
+	// mul_scalar<<<grid,block>>>(u.get(),(COMPLEX_T) (1.0f / (ny2 * nx2 * d)),ny,nx);
+	cudaDeviceSynchronize();
+	//開放
+	cufftDestroy(fftplan);
+	buf1.reset();
+	buf2.reset();
+	cudaDeviceSynchronize();
+}
+
+
+template<typename COMPLEX_T,typename PREC_T>
+__global__ void gFresnelResponseBandLimit(thrust::complex<COMPLEX_T>* u,
+                int ny, int nx,PREC_T dy, PREC_T dx, PREC_T lambda, PREC_T d,int64_t lim){
+    int w = blockIdx.x * blockDim.x + threadIdx.x;
+    int h = blockIdx.y * blockDim.y + threadIdx.y;
+	int idx = h * nx + w;
+    if ( (w < nx) && (h < ny) ){
+		int hnx = nx / 2;
+		int hny = ny / 2;
+		u[idx] = w;
+		if (abs(w - hnx) < lim && abs(h - hny) < lim){
+			PREC_T x = (PREC_T) (w - hnx)  * dx;
+			PREC_T y = (PREC_T) (h - hny) * dy;
+			PREC_T tmp= 1.0 * M_PI* ( x*x + y*y  )  / (lambda * d);
+			u[idx] = thrust::complex<COMPLEX_T>(cos(tmp),sin(tmp));
+		}
+		else{
+			u[idx] = 0;
+		}
+    }
+}
+
+template<typename PREC_T,typename COMPLEX_T>
+void gFresnelResponseBandLimit(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& h,size_t ny, size_t nx,
+                    PREC_T dy,PREC_T dx, PREC_T lambda, PREC_T z)
+{
+    PREC_T xlim;
+    int wlim;
+    xlim = abs(lambda * z * 0.5 / dx);
+    // ylim = abs(lambda * z * 0.5 / dy);
+    wlim = floor (xlim / dx);
+    // hlim = floor (ylim / dy);
+	dim3 block(16, 16, 1);
+	dim3 grid(ceil((float)nx / block.x), ceil((float)ny / block.y), 1);
+	gFresnelResponseBandLimit<<<grid,block>>>(h.get(),ny,nx,dy,dx,lambda,z,wlim);
+	cudaDeviceSynchronize();
+    
+}
+
+// u is device data before zero padding
+template<typename COMPLEX_T,typename PREC_T>
+void gFresnelPropBandLimit(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& u,
+                int ny, int nx,PREC_T dy, PREC_T dx, PREC_T lambda, PREC_T d){
+	int ny2 = ny * 2;
+	int nx2 = nx * 2;
+	// int mem_size = sizeof(cufftComplex) * ny2 * nx2; 
+	auto buf1 = cuda::make_unique<thrust::complex<COMPLEX_T>[]>(ny2 * nx2);
+	auto buf2 = cuda::make_unique<thrust::complex<COMPLEX_T>[]>(ny2 * nx2);
+
+	dim3 block(16, 16, 1);
+	dim3 grid(ceil((float)nx2 / block.x), ceil((float)ny2 / block.y), 1);
+	//開口面a(x,y)のフーリエ変換
+	// gzeropadding<<< grid, block >>>(u.get(),buf1.get(),ny,nx);
+	gzeropadding(u,buf1,ny,nx,ny2,nx2);
+	cudaDeviceSynchronize();
+	cufftHandle fftplan;
+	cufftPlan2d(&fftplan, ny2, nx2, CUFFT_C2C);
+	cufftExecC2C(fftplan, (cufftComplex*)buf1.get(), (cufftComplex*)buf1.get(), CUFFT_FORWARD);
+	mul_scalar<<<grid,block>>>(buf1.get(),(COMPLEX_T) (1.0f / (ny2 * nx2)),ny2,nx2);
+	//p(x,y)を算出
+    // gFresnelResponseFFTShift<<< grid, block >>>(buf2.get(),ny2,nx2,dy,dx,lambda,d);
+	gFresnelResponseBandLimit(buf2,ny2,nx2,dy,dx,lambda,d);
+	gfftshift(buf2,ny2,nx2);
+	cudaDeviceSynchronize();
+	//p(x,y)のFFT
+	cufftExecC2C(fftplan, (cufftComplex*)buf2.get(), (cufftComplex*)buf2.get(), CUFFT_FORWARD);
+	mul_scalar<<<grid,block>>>(buf2.get(),(COMPLEX_T) (1.0f / (ny2 * nx2)),ny2,nx2);
+	//複素乗算
+	KernelMult<<< grid, block>>>(buf1.get(), buf2.get(), buf1.get(), ny2, nx2);
+	// gfftshift(buf1,ny2,nx2);
+	//逆FFT
+	cufftExecC2C(fftplan, (cufftComplex*)buf1.get(), (cufftComplex*)buf1.get(), CUFFT_INVERSE);
+	// gfftshift(buf1,ny2,nx2);
 	
 	gdel_zero<<< grid, block >>>(buf1.get(),u.get(),ny2,nx2);
 	grid = dim3(ceil((float)nx / block.x), ceil((float)ny / block.y), 1);
@@ -474,7 +562,7 @@ void Prop(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& u,
         else{
             if (FresnelPropCheck(ny,nx,dy,dx,lambda,d) == false){
                 printf("warning!!\neither AsmProp or FresnelProp does not meet the condition.\n");
-				gAsmProp(u,ny,nx,dy,dx,lambda,d);
+				gFresnelPropBandLimit(u,ny,nx,dy,dx,lambda,d);
 				return;
             }
             printf("FresnelProp\n");

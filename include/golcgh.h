@@ -322,6 +322,7 @@ __global__ void WRPStep1(_Tp* points,PREC_T* W ,thrust::complex<COMPLEX_T>* U,in
             PREC_T theta = 2 * F32_PI * (tmp)/(2 * dz * lambda);
             // PREC_T theta = 2 * M_PI * sqrt(dx * dx + dy * dy + dz * dz)/(lambda);
             thrust::complex<PREC_T> Utmp = thrust::complex<PREC_T>(cos(theta),sin(theta))/abs(dz);
+            // thrust::complex<PREC_T> Utmp = thrust::complex<PREC_T>(cos(theta),sin(theta));
             U[idx] += Utmp;
         }
     }
@@ -371,6 +372,17 @@ void WRPStep1(gObject<_Tp>& obj,cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& 
     dim3 grid(ceil((float) obj.size / block.x),1, 1);
     auto W = cuda::make_unique<PREC_T[]>(obj.size);
     WRPStep1Pre<<<grid,block>>>(obj.points.get(),W.get(),obj.size,p,lambda,d);
+    block = dim3(16,16,1); grid = dim3(ceil((float) nx / block.x),ceil((float) ny / block.y), 1);
+    WRPStep1<<<grid,block>>>(obj.points.get(),W.get(),U.get(),obj.size,ny,nx,p,lambda,d);
+    cudaDeviceSynchronize();
+}
+
+template<typename _Tp,typename COMPLEX_T,typename PREC_T>
+void WRPStep1(gObject<_Tp>& obj,cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& U,int ny, int nx,PREC_T p, PREC_T lambda,PREC_T d,PREC_T plimit){
+    dim3 block(256,1,1);
+    dim3 grid(ceil((float) obj.size / block.x),1, 1);
+    auto W = cuda::make_unique<PREC_T[]>(obj.size);
+    WRPStep1Pre<<<grid,block>>>(obj.points.get(),W.get(),obj.size,plimit,lambda,d);
     block = dim3(16,16,1); grid = dim3(ceil((float) nx / block.x),ceil((float) ny / block.y), 1);
     WRPStep1<<<grid,block>>>(obj.points.get(),W.get(),U.get(),obj.size,ny,nx,p,lambda,d);
     cudaDeviceSynchronize();
@@ -465,9 +477,17 @@ void WRPStep1_D(gObject<_Tp>& obj,cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>
     block = dim3(16,16,1); grid = dim3(ceil((float) nx / block.x),ceil((float) ny / block.y), 1);
     WRPStep1_D<<<grid,block>>>(obj.points.get(),D.get(),U.get(),obj.size,ny,nx,p,lambda,d);
     cudaDeviceSynchronize();
-    // auto hd = cuda2cpu(D,obj.size);
-    // printf("%f  %f\n",hd[0],hd[obj.size-1]);
-    // printf("xrange = %f, yrange = %f\n",nx*p,ny*p);
+}
+
+template<typename _Tp,typename COMPLEX_T,typename PREC_T>
+void WRPStep1_D(gObject<_Tp>& obj,cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& U,int ny, int nx,PREC_T p, PREC_T lambda,PREC_T d,PREC_T plimit){
+    dim3 block(256,1,1);
+    dim3 grid(ceil((float) obj.size / block.x),1, 1);
+    auto D = cuda::make_unique<PREC_T[]>(obj.size);
+    WRPStep1Pre_D<<<grid,block>>>(obj.points.get(),D.get(),obj.size,plimit,lambda,d);
+    block = dim3(16,16,1); grid = dim3(ceil((float) nx / block.x),ceil((float) ny / block.y), 1);
+    WRPStep1_D<<<grid,block>>>(obj.points.get(),D.get(),U.get(),obj.size,ny,nx,p,lambda,d);
+    cudaDeviceSynchronize();
 }
 
 

@@ -23,7 +23,7 @@ int main(){
     // cudaHostRegister(u.get(),WIDTH * HEIGHT * sizeof(std::complex<PREC_T>),cudaHostRegisterDefault);
 
     auto obj = ol::objread<PREC_T>(path3d);
-    ol::objset(obj,WIDTH * p * 0.8,HEIGHT * p * 0.8,offset,ol::ZMIDDLE);
+    ol::objset(obj,WIDTH * p * 1,HEIGHT * p * 1,offset,ol::ZMIDDLE);
     std::cout << obj.size << std::endl;
     ol::objinfo(obj);
     ol::objsort(obj);
@@ -35,6 +35,7 @@ int main(){
     auto gobj = ol::Object2cuda<PREC_T>(obj);
     // ol::gCgh(gobj,devData,HEIGHT,WIDTH,p,lambda);
     ol::WRPMethod_D(gobj,devData,HEIGHT,WIDTH,p,lambda,d,-1.0f,ol::PROPMODE::AUTO);
+    // ol::WRPStep1_D(gobj,devData,HEIGHT,WIDTH,p,lambda,0.0f);
     // ol::gCghReduction(gobj,devData,HEIGHT,WIDTH,p,lambda);
     // ol::gMedianFilter(devData,devData,HEIGHT,WIDTH,8,8);
     ol::cuda2cpu(devData,u,HEIGHT * WIDTH);

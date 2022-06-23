@@ -1,6 +1,8 @@
 #ifndef OLCLASS_H
 #define OLCLASS_H
 #include <memory>
+#include <chrono>
+#include <iostream>
 namespace ol{
 
 #define OL_32F 0
@@ -66,6 +68,27 @@ struct Object{
         // Object& operator +(int n) {idx += n; return this;}
         // Object& operator ++() {idx++; return points;}
 }; 
+
+class ProcessingTime{
+    public:
+        std::chrono::system_clock::time_point  start_time, end_time;
+        bool startflag = false;
+        void start(){
+            if (startflag == false){
+                start_time = std::chrono::system_clock::now();
+            }
+        }
+        void end(){
+            end_time = std::chrono::system_clock::now();
+        }
+        void print(){
+            auto time = end_time - start_time;
+            auto msec = std::chrono::duration_cast<std::chrono::milliseconds>(time).count();
+            std::cout << msec << " msec" << std::endl;
+        }
+};
+
+
 }
 
 #endif

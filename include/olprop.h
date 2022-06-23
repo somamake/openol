@@ -23,6 +23,66 @@ void FresnelResponse(std::unique_ptr<std::complex<COMPLEX_T>[]>& h,size_t height
     }
 }
 
+template<typename PREC_T=double,typename COMPLEX_T>
+void FresnelResponseBandLimit(std::unique_ptr<std::complex<COMPLEX_T>[]>& h,size_t height, size_t width,
+                    PREC_T dy,PREC_T dx, PREC_T lambda, PREC_T z)
+{
+    PREC_T tmp = 1 / (lambda * z);
+    int64_t hh = height/2;
+    int64_t hw = width/2;
+    PREC_T xlim,ylim;
+    int wlim, hlim;
+    xlim = abs(lambda * z * 0.5 / dx);
+    ylim = abs(lambda * z * 0.5 / dy);
+    wlim = floor (xlim / dx);
+    hlim = floor (ylim / dy);
+    for(int64_t n = 0;n < (int64_t)height;n++){
+        PREC_T y = ((PREC_T)( (n - hh) )) * dy;
+        for(int64_t m = 0;m < (int64_t)width;m++){
+            size_t idx = n * width + m;
+            if (abs(m - hw) < wlim && abs(n - hh) < hlim){
+                PREC_T x = ((PREC_T)( (m - hw) )) * dx;
+                PREC_T phase =  M_PI* ( x * x + y * y ) * tmp ;
+                h[idx] = std::complex<COMPLEX_T>(cos(phase),sin(phase));
+            }
+            else{
+                h[idx] = 0;
+            }
+            
+        }
+    }
+}
+
+template<typename PREC_T=double,typename COMPLEX_T>
+void FresnelResponseBandLimit(std::unique_ptr<std::complex<COMPLEX_T>[]>& h,size_t height, size_t width,
+                    PREC_T dy,PREC_T dx, PREC_T lambda, PREC_T z,PREC_T p_limit)
+{
+    PREC_T tmp = 1 / (lambda * z);
+    int64_t hh = height/2;
+    int64_t hw = width/2;
+    PREC_T xlim,ylim;
+    int wlim, hlim;
+    xlim = abs(lambda * z * 0.5 / p_limit);
+    ylim = abs(lambda * z * 0.5 / p_limit);
+    wlim = floor (xlim / dx);
+    hlim = floor (ylim / dy);
+    for(int64_t n = 0;n < (int64_t)height;n++){
+        PREC_T y = ((PREC_T)( (n - hh) )) * dy;
+        for(int64_t m = 0;m < (int64_t)width;m++){
+            size_t idx = n * width + m;
+            if (abs(m - hw) < wlim && abs(n - hh) < hlim){
+                PREC_T x = ((PREC_T)( (m - hw) )) * dx;
+                PREC_T phase =  M_PI* ( x * x + y * y ) * tmp ;
+                h[idx] = std::complex<COMPLEX_T>(cos(phase),sin(phase));
+            }
+            else{
+                h[idx] = 0;
+            }
+            
+        }
+    }
+}
+
 template<typename PREC_T = double>
 void FresnelResponseCheck(size_t height, size_t width,PREC_T dy, PREC_T dx, PREC_T lambda, PREC_T z)
 {
@@ -36,8 +96,8 @@ void FresnelResponseCheck(size_t height, size_t width,PREC_T dy, PREC_T dx, PREC
     zmin_y = 2 * ymax * dy / lambda;
     xlim = lambda * z * 0.5 / dx;
     ylim = lambda * z * 0.5 / dy;
-    wlim = ceil (xlim / dx) * 2;
-    hlim = ceil (ylim / dy) * 2;
+    wlim = floor (xlim / dx) * 2;
+    hlim = floor (ylim / dy) * 2;
     std::cout << "zmin (from x) = " <<std::setprecision(4) << zmin_x << std::endl;
     std::cout << "zmin (from y) = " <<std::setprecision(4) << zmin_y << std::endl;
     std::cout << "xlim = " <<std::setprecision(4) << xlim << std::endl;
@@ -56,7 +116,7 @@ bool FresnelPropCheck(size_t ny, size_t nx,PREC_T dy, PREC_T dx, PREC_T lambda, 
     PREC_T zmin_x,zmin_y;
     zmin_x = 2 * xmax * dx / lambda;
     zmin_y = 2 * ymax * dy / lambda;
-    if (zmin_x > z || zmin_y > z){
+    if (zmin_x > abs(z) || zmin_y > abs(z)){
         return false;
     }
     return true;
@@ -81,6 +141,28 @@ void FresnelProp(std::unique_ptr<std::complex<COMPLEX_T>[]>& u,size_t height, si
     mul_scalar(h,1.0/(height*width),height,width);
     mul_complex(u,h,u,height,width);
     // fftshift(u,height,width);
+    ifft(u,u,height,width);
+    
+    del_zero(u,u,height,width);
+    // mul_scalar(u,1.0/(height*width),height/2,width/2);
+}
+
+template<typename PREC_T = double, typename COMPLEX_T>
+void FresnelPropBandLimit(std::unique_ptr<std::complex<COMPLEX_T>[]>& u,size_t height, size_t width,PREC_T dy, PREC_T dx, PREC_T lambda, PREC_T z)
+{
+    
+    zeropadding(u,u,height,width);
+    height *= 2; 
+    width *= 2;
+    
+    auto h = std::make_unique<std::complex<COMPLEX_T>[]>(height * width);
+    FresnelResponseBandLimit(h, height, width, dy, dx,  lambda, z);
+    fftshift(h,height,width);
+    fft(u,u,height,width);
+    fft(h,h,height,width);
+    mul_scalar(u,1.0/(height*width),height,width);
+    mul_scalar(h,1.0/(height*width),height,width);
+    mul_complex(u,h,u,height,width);
     ifft(u,u,height,width);
     
     del_zero(u,u,height,width);
@@ -569,6 +651,34 @@ void splitAsmProp(std::unique_ptr<std::complex<COMPLEX_T>[]>& u,int64_t height, 
         }
     }
     u = std::move(udst);
+}
+
+template<typename COMPLEX_T,typename PREC_T>
+void Prop(std::unique_ptr<std::complex<COMPLEX_T>[]>& u,
+                int ny, int nx,PREC_T dy, PREC_T dx, PREC_T lambda, PREC_T d,PROPMODE propmode = ol::PROPMODE::AUTO){
+	if (propmode == PROPMODE::FRESNEL){
+		printf("FresnelProp\n");
+        FresnelProp(u,ny,nx,dy,dx,lambda,d);
+    }
+    else if (propmode == PROPMODE::ASM){
+		printf("AsmProp\n");
+        AsmProp(u,ny,nx,dy,dx,lambda,d);
+    }
+    else if (propmode == PROPMODE::AUTO){
+        if (AsmPropCheck(ny,nx,dy,dx,lambda,d) == true){
+            printf("AsmProp\n");
+            AsmProp(u,ny,nx,dy,dx,lambda,d);
+        }
+        else{
+            if (FresnelPropCheck(ny,nx,dy,dx,lambda,d) == false){
+                printf("warning!!\neither AsmProp or FresnelProp does not meet the condition.\n");
+				FresnelPropBandLimit(u,ny,nx,dy,dx,lambda,d);
+				return;
+            }
+            printf("FresnelProp\n");
+            FresnelProp(u,ny,nx,dy,dx,lambda,d);
+        }
+    }
 }
 
 }

@@ -58,7 +58,8 @@ int main(){
     start = std::chrono::system_clock::now();
     ol::cpu2cuda(u,d_u,HEIGHT * WIDTH);
     
-    ol::Prop(d_u,HEIGHT,WIDTH,p,p,lambda,-d-0.000f,ol::ASM);
+    ol::Prop(d_u,HEIGHT,WIDTH,p,p,lambda,-d-0.000f,ol::FRESNEL);
+    // ol::gFresnelPropBandLimit(d_u,HEIGHT,WIDTH,p,p,lambda,-d-0.000f);
     // ol::shiftedProp(d_u,d_u,HEIGHT,WIDTH,p,p,lambda,-d,-HEIGHT * p * 0.5f,-WIDTH * p * 0.5f,ol::PROPMODE::FRESNEL);
     // ol::gsplitProp(u,HEIGHT,WIDTH,p,p,lambda,-d,ol::PROPMODE::ASM);
     

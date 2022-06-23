@@ -43,10 +43,10 @@ int main(){
 
     start = std::chrono::system_clock::now();
     // fftwf_init_threads();
-    // ol::FresnelProp(u,HEIGHT,WIDTH,p,p,lambda,-d);
+    ol::FresnelProp(u,HEIGHT,WIDTH,p,p,lambda,-d);
     // ol::AsmProp(u,HEIGHT,WIDTH,p,p,lambda,-d);
     // ol::shiftedAsmProp(u,u,HEIGHT,WIDTH,p,p,lambda,-d,0.001f,0.001f);
-    ol::splitAsmProp(u,HEIGHT,WIDTH,p,p,lambda,-d);
+    // ol::splitAsmProp(u,HEIGHT,WIDTH,p,p,lambda,-d);
     // ol::shiftedFresnelProp<PREC_T>(u,HEIGHT,WIDTH,p/s,p/s,lambda,d,s,0.012,0.012);
 
 

@@ -11,7 +11,7 @@
 #include "olcgh.h"
 #include "olobject.h"
 #include "Diffuser.h"
-#include "Lensearry.h"
+#include "Lensarry.h"
 
 
 #ifdef __NVCC__
