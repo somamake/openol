@@ -2,7 +2,7 @@
 data
 *.o
 build
-out
+# out
 mov
 a.out
 .DS_Store
@@ -11,5 +11,3 @@ a.out
 .ipynb_checkpoints
 __pycache__
 *.cpython-38.pyc
-3ddata
-# CMakeLists.txt
