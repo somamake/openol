@@ -12,4 +12,4 @@ a.out
 __pycache__
 *.cpython-38.pyc
 3ddata
-CMakeLists.txt
+# CMakeLists.txt

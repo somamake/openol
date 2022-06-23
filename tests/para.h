@@ -3,7 +3,7 @@
 #include "openol.h"
 
 #ifndef PROJECT_ROOT
-#define PROJECT_ROOT "/Users/somafujimori/codes/holo"
+#define PROJECT_ROOT
 #endif
 typedef float PREC_T;
 

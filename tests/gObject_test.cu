@@ -11,9 +11,9 @@
 
 
 int main(){
-    // char path3d[] = PROJECT_ROOT "/data/horn02-f000.3d";
+    char path3d[] = PROJECT_ROOT "/3ddata/horn02-f000.3d";
     // char path3d[] = PROJECT_ROOT "/3ddata/hayabusa_7877/3d/hayabusa_7877_021.3d";
-    char path3d[] = PROJECT_ROOT "/3ddata/tyrano_6215/3DF/10fps/tyrannoLow_010.3df";
+    // char path3d[] = PROJECT_ROOT "/3ddata/tyrano_6215/3DF/10fps/tyrannoLow_010.3df";
     // char path3d[] = PROJECT_ROOT "/data/cube284.3d";
     ol::Vect3<PREC_T> offset((float) (WIDTH / 2 * p),(float) (HEIGHT / 2 * p),d);
     
@@ -23,7 +23,7 @@ int main(){
     // cudaHostRegister(u.get(),WIDTH * HEIGHT * sizeof(std::complex<PREC_T>),cudaHostRegisterDefault);
 
     auto obj = ol::objread<PREC_T>(path3d);
-    ol::objset(obj,WIDTH * p * 1,HEIGHT * p * 1,offset,ol::ZMIDDLE);
+    ol::objset(obj,WIDTH * p * 0.8,HEIGHT * p * 0.8,offset,ol::ZMIDDLE);
     std::cout << obj.size << std::endl;
     ol::objinfo(obj);
     ol::objsort(obj);
