@@ -1,6 +1,7 @@
 #ifndef GOLPROP_H
 #define GOLPROP_H
 #include "golutils.h"
+#include "oldefine.h"
 
 namespace ol{
 
@@ -780,6 +781,187 @@ void gsplitProp(std::unique_ptr<std::complex<COMPLEX_T>[]>& u,int64_t height, in
     u = std::move(udst);
 }
 
+
+template<typename COMPLEX_T,typename PREC_T>
+__global__ void gARSSFresnelProp_u(thrust::complex<COMPLEX_T>* src,thrust::complex<COMPLEX_T>* dst,int ny, int nx, 
+                    PREC_T dy,PREC_T dx, PREC_T lambda, PREC_T z,PREC_T s,PREC_T oy, PREC_T ox,int hlim,int wlim){
+	int w = blockIdx.x * blockDim.x + threadIdx.x;
+    int h = blockIdx.y * blockDim.y + threadIdx.y;
+	int idx = h * nx + w;
+	
+	if ( (w >= nx) || (h >= ny) ){
+		return;
+	}
+	int hny = ny / 2; int hnx = nx / 2;
+	if (abs(w - hnx) >= wlim || abs(h - hny) >= hlim){
+		dst[idx] = 0;
+	}
+	else{
+		PREC_T tmp = M_PI / (lambda * z);
+		PREC_T y1 = (h - hny) * dy;
+		PREC_T phiu_y = (s * s - s) * y1 * y1 - 2 * s * oy * y1;
+		PREC_T x1 = (w - hnx) * dx;
+		PREC_T phiu = (s * s - s) * x1 * x1 - 2 * s * ox * x1;
+		phiu += phiu_y;
+		phiu *= tmp;
+		PREC_T real = cos(phiu);
+		PREC_T imag = sin(phiu);
+		dst[idx] = src[idx] * thrust::complex<COMPLEX_T>(real,imag);
+	}
+	
+}
+
+template<typename PREC_T,typename COMPLEX_T>
+void gARSSFresnelProp_u(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& src,cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& dst,size_t ny, size_t nx,
+                    PREC_T dy,PREC_T dx, PREC_T lambda, PREC_T z,PREC_T s,PREC_T oy, PREC_T ox)
+{
+    PREC_T xlim,ylim;
+    int wlim,hlim;
+    xlim = lambda * abs(z) * 0.5 / (s * abs(s - 1) * dx);
+    wlim = floor (xlim / dx);
+	ylim = lambda * abs(z) * 0.5 / (s * abs(s - 1) * dy);
+    hlim = floor (ylim / dy);
+	dim3 block(16, 16, 1);
+	dim3 grid(ceil((float)nx / block.x), ceil((float)ny / block.y), 1);
+	gARSSFresnelProp_u<<<grid,block>>>(src.get(),dst.get(),ny,nx,dy,dx,lambda,z,s,oy,ox,hlim,wlim);
+	cudaDeviceSynchronize();
+}
+
+template<typename COMPLEX_T,typename PREC_T>
+__global__ void gARSSFresnelProp_h(thrust::complex<COMPLEX_T>* dst,int ny, int nx, 
+                    PREC_T dy,PREC_T dx, PREC_T lambda, PREC_T z,PREC_T s,int64_t lim){
+	int w = blockIdx.x * blockDim.x + threadIdx.x;
+    int h = blockIdx.y * blockDim.y + threadIdx.y;
+	int idx = h * nx + w;
+	if ( (w >= nx) || (h >= ny) ){
+		return;
+	}
+	int hny = ny / 2; int hnx = nx / 2;
+	
+	if (abs(w - hnx) >= lim || abs(h - hny) >= lim){
+		dst[idx] = 0;
+	}
+	else{
+		PREC_T tmp = M_PI / (lambda * z);
+		PREC_T y1 = (h - hny) * dy;
+		PREC_T x1 = (w - hnx) * dx;
+		PREC_T phih_y = s * y1 * y1;
+		PREC_T phih = s * x1 * x1 + phih_y;
+		phih *= tmp;
+		dst[idx] = thrust::complex<COMPLEX_T>(cos(phih),sin(phih));
+	}
+}
+
+template<typename PREC_T,typename COMPLEX_T>
+void gARSSFresnelProp_h(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& h,size_t ny, size_t nx,
+                    PREC_T dy,PREC_T dx, PREC_T lambda, PREC_T z,PREC_T s)
+{
+    PREC_T xlim;
+    int wlim;
+    xlim = abs(lambda * z * 0.5 / (dx * s));
+    wlim = floor (xlim / dx);
+	dim3 block(16, 16, 1);
+	dim3 grid(ceil((float)nx / block.x), ceil((float)ny / block.y), 1);
+	gARSSFresnelProp_h<<<grid,block>>>(h.get(),ny,nx,dy,dx,lambda,z,s,wlim);
+	cudaDeviceSynchronize();
+}
+
+template<typename COMPLEX_T,typename PREC_T>
+__global__ void gARSSFresnelProp_Cz(thrust::complex<COMPLEX_T>* u,int ny, int nx, 
+                    PREC_T dy,PREC_T dx, PREC_T lambda, PREC_T z,PREC_T s,PREC_T oy, PREC_T ox,int hlim, int wlim){
+	int w = blockIdx.x * blockDim.x + threadIdx.x;
+    int h = blockIdx.y * blockDim.y + threadIdx.y;
+	int idx = h * nx + w;
+	if ( (w >= nx) || (h >= ny) ){
+		return;
+	}
+	int hny = ny / 2; int hnx = nx / 2;
+	if (abs(w - hnx) < wlim && abs(h - hny) < hlim){
+		PREC_T tmp = M_PI / (lambda * z);
+		PREC_T y2 = (h - hny) * dy;
+		PREC_T phic_y = ( (1 - s) * y2 * y2 + 2 * oy * y2 + oy * oy);
+		PREC_T x2 = (w - hnx) * dx;
+		PREC_T phic = ( (1 - s) * x2 * x2 + 2 * ox * x2 + ox * ox);
+		phic += phic_y;
+		phic *= tmp;
+		PREC_T real = cos(phic);
+		PREC_T imag = sin(phic);
+		u[idx] = u[idx] * thrust::complex<COMPLEX_T>(real,imag);
+	}
+}
+
+template<typename PREC_T,typename COMPLEX_T>
+void gARSSFresnelProp_Cz(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& h,size_t ny, size_t nx,
+                    PREC_T dy,PREC_T dx, PREC_T lambda, PREC_T z,PREC_T s,PREC_T oy, PREC_T ox)
+{
+    PREC_T xlim,ylim;
+    int wlim,hlim;
+    xlim = lambda * abs(z) * 0.5 / (abs(1 - s) * dx);
+    wlim = floor (xlim / dx);
+	ylim = lambda * abs(z) * 0.5 / (abs(1 - s) * dy);
+    hlim = floor (ylim / dy);
+	dim3 block(16, 16, 1);
+	dim3 grid(ceil((float)nx / block.x), ceil((float)ny / block.y), 1);
+	gARSSFresnelProp_Cz<<<grid,block>>>(h.get(),ny,nx,dy,dx,lambda,z,s,oy,ox,hlim,wlim);
+	cudaDeviceSynchronize();
+}
+
+
+template<typename PREC_T=float,typename COMPLEX_T>
+void ARSSFresnelProp(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& usrc,cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& udst,
+                        int ny, int nx, PREC_T dy, PREC_T dx, PREC_T lambda, PREC_T z, PREC_T s,PREC_T oy,PREC_T ox){
+	int ny2 = ny * 2;
+	int nx2 = nx * 2;
+
+	auto buf1 = cuda::make_unique<thrust::complex<COMPLEX_T>[]>(ny2 * nx2);
+	auto buf2 = cuda::make_unique<thrust::complex<COMPLEX_T>[]>(ny2 * nx2);
+
+	dim3 block(16, 16, 1);
+	dim3 grid(ceil((float)nx / block.x), ceil((float)ny / block.y), 1);
+
+
+	gARSSFresnelProp_u(usrc,udst,ny,nx,dy,dx,lambda,z,s,oy,ox);
+	cudaDeviceSynchronize();
+	
+	grid = dim3(ceil((float)nx2 / block.x), ceil((float)ny2 / block.y), 1);
+    gzeropadding(udst,buf1,ny,nx,ny2,nx2);
+	cudaDeviceSynchronize();
+
+	cufftHandle fftplan;
+	cufftPlan2d(&fftplan, ny2, nx2, CUFFT_C2C);
+	cufftExecC2C(fftplan, (cufftComplex*)buf1.get(), (cufftComplex*)buf1.get(), CUFFT_FORWARD);
+	cufftDestroy(fftplan);
+	mul_scalar<<<grid,block>>>(buf1.get(),(COMPLEX_T) (1.0f / (ny2 * nx2)),ny2,nx2);
+
+	gARSSFresnelProp_h(buf2,ny2,nx2,dy,dx,lambda,z,s);
+	// gFresnelResponse<<< grid, block >>>(buf2.get(),ny2,nx2,dy,dx,lambda,z);
+	gfftshift(buf2,ny2,nx2);
+	cufftPlan2d(&fftplan, ny2, nx2, CUFFT_C2C);
+    cufftExecC2C(fftplan, (cufftComplex*)buf2.get(), (cufftComplex*)buf2.get(), CUFFT_FORWARD);
+	cufftDestroy(fftplan);
+	mul_scalar<<<grid,block>>>(buf2.get(),(COMPLEX_T) (1.0f / (ny2 * nx2)),ny2,nx2);
+
+	KernelMult<<< grid, block>>>(buf1.get(), buf2.get(), buf1.get(), ny2, nx2);
+
+	cufftPlan2d(&fftplan, ny2, nx2, CUFFT_C2C);
+	cufftExecC2C(fftplan, (cufftComplex*)buf1.get(), (cufftComplex*)buf1.get(), CUFFT_INVERSE);
+    
+    gdel_zero<<< grid, block>>>(buf1.get(),udst.get(),ny2,nx2);
+	
+	grid = dim3(ceil((float)nx / block.x), ceil((float)ny / block.y), 1);
+	// mul_scalar<<<grid,block>>>(u.get(),(COMPLEX_T) (1.0f / (ny2 * nx2)),ny,nx);
+	gARSSFresnelProp_Cz(udst,ny,nx,dy,dx,lambda,z,s,oy,ox);
+	cufftDestroy(fftplan);
+	buf1.reset();
+	buf2.reset();
+	cudaDeviceSynchronize();
+}
+
+template<typename PREC_T=float,typename COMPLEX_T>
+void ARSSFresnelProp(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& usrc,cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& udst,
+                        int ny, int nx, PREC_T dy, PREC_T dx, PREC_T lambda, PREC_T z, PREC_T s){
+	ARSSFresnelProp(usrc,udst,ny,nx,dy,dx,lambda,z,s,0.0f,0.0f);
+}
 }
 
 #endif

@@ -46,6 +46,6 @@ const PREC_T lambda=633.0e-9;	//赤色レーザ波長
 const PREC_T d=0.01;	//開口面と観察面間の距離
 
 #endif
-const PREC_T s = 1.0;
+const PREC_T s = 0.25;
 
 #define PARA_H

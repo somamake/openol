@@ -58,19 +58,17 @@ int main(){
     start = std::chrono::system_clock::now();
     ol::cpu2cuda(u,d_u,HEIGHT * WIDTH);
     
-    ol::Prop(d_u,HEIGHT,WIDTH,p,p,lambda,-d-0.000f,ol::FRESNEL);
+    // ol::Prop(d_u,HEIGHT,WIDTH,p,p,lambda,-d-0.000f,ol::FRESNEL);
     // ol::gFresnelPropBandLimit(d_u,HEIGHT,WIDTH,p,p,lambda,-d-0.000f);
     // ol::shiftedProp(d_u,d_u,HEIGHT,WIDTH,p,p,lambda,-d,-HEIGHT * p * 0.5f,-WIDTH * p * 0.5f,ol::PROPMODE::FRESNEL);
     // ol::gsplitProp(u,HEIGHT,WIDTH,p,p,lambda,-d,ol::PROPMODE::ASM);
     
     // ol::gshiftedFresnelProp(d_u,d_u,HEIGHT,WIDTH,(PREC_T)p/s,(PREC_T)p/s,(PREC_T)lambda,(PREC_T)-d,(PREC_T)s,-HEIGHT * p * 0.0f,-WIDTH * p * 0.0f);
+    ol::ARSSFresnelProp(d_u,d_u,HEIGHT,WIDTH,(PREC_T)p/s,(PREC_T)p/s,(PREC_T)lambda,(PREC_T)-d,(PREC_T)s);
     ol::cuda2cpu(d_u,u,HEIGHT*WIDTH);
-    // cudaHostUnregister(u.get());
 
     end = std::chrono::system_clock::now();  // 計測終了時間
     auto msec = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     std::cout << msec << " msec" << std::endl;
-    // ol::complex2img(u,img,HEIGHT,WIDTH);
-    // ol::bmpwrite(PROJECT_ROOT "/out/olProp.bmp",img.get(),HEIGHT,WIDTH);
     ol::Save(PROJECT_ROOT "/out/olProp.bmp",u,HEIGHT,WIDTH,ol::AMP);
 }

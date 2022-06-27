@@ -413,6 +413,56 @@ void NearestNeighborInterpolation(cuda::unique_ptr<_Tp[]>& src, cuda::unique_ptr
 	}
     dst = std::move(tmp);
 }
+// srcとdstのサイズは整数倍でなくてよい
+// template<typename _Tp>
+// __global__ void AreaAverageKernel(_Tp* src, _Tp* dst,int64_t in_ny, int64_t in_nx,
+// 				int64_t out_ny,int64_t out_nx){
+
+// 	int m = blockIdx.x*blockDim.x + threadIdx.x;
+//     int n = blockIdx.y*blockDim.y + threadIdx.y;
+// 	if (m >= out_nx || n >= out_ny){
+// 		return;
+// 	}
+//     float xscale = (float)out_nx / in_nx;
+//     float yscale = (float)out_ny / in_ny; 
+
+// 	float dstx = m / xscale; 
+// 	float dsty = n / yscale;
+// 	int64_t ms = round(dstx); int64_t ns = round(dsty);
+//     if(0 <= ms && ms < in_nx && 0 <= ns && ns < in_ny){
+// 		_Tp sum = 0;
+// 		for (int local_h = 0;local_h < filter_ny;local_h++){
+// 			for (int local_w = 0;local_w < filter_nx;local_w++){
+// 				sum += src[(w * filter_nx + local_w)+ (h * filter_ny + local_h)* in_nx];
+// 			}
+// 		}
+// 		dst[w + h * out_nx] = sum / (filter_ny * filter_nx);
+// 		// dst = 0;
+//     }
+//     else{
+//         dst = 0;
+//     }
+// }
+
+// template<typename _Tp>
+// void AreaAverage(cuda::unique_ptr<_Tp[]>& src, cuda::unique_ptr<_Tp[]>& dst,int64_t in_ny, int64_t in_nx,int64_t out_ny,int64_t out_nx){
+//     cuda::unique_ptr<_Tp[]> tmp;
+//     if (src == dst || (void*)dst.get() == NULL ){
+// 		tmp = cuda::make_unique<_Tp[]>(out_ny * out_nx);
+// 	}
+// 	else{
+// 		tmp = std::move(dst);
+// 	}
+// 	dim3 block(16, 16, 1);
+// 	dim3 grid(ceil((float)out_nx / block.x), ceil((float)out_ny / block.y), 1);
+// 	AreaAverageKernel<<<grid,block>>>(src.get(),tmp.get(),in_ny,in_nx,out_ny,out_nx);
+    
+//     if (src == dst){
+// 		src.reset();
+// 	}
+//     dst = std::move(tmp);
+// }
+
 
 }
 

@@ -475,5 +475,36 @@ void expand(std::unique_ptr<_Tp[]>& src, std::unique_ptr<_Tp[]>& dst,int in_ny, 
     dst = std::move(tmp);
 }
 
+// 面積平均法
+template<typename _Tp>
+void AreaAverage(std::unique_ptr<_Tp[]>& src, std::unique_ptr<_Tp[]>& dst,int64_t in_ny, int64_t in_nx,int64_t out_ny,int64_t out_nx){
+    std::unique_ptr<_Tp[]> tmp;
+    if (src == dst || (void*)dst.get() == NULL ){
+		tmp = std::make_unique<_Tp[]>(out_ny * out_nx);
+	}
+	else{
+		tmp = std::move(dst);
+	}
+    float xscale = (float)out_nx / in_nx;
+    float yscale = (float)out_ny / in_ny; 
+    for(int n = 0;n < out_ny;n++){
+        for (int m = 0;m < out_nx;m++){
+            float dstx = m / xscale; 
+            float dsty = n / yscale;
+            int64_t ms = round(dstx); int64_t ns = round(dsty);
+            if(0 <= ms && ms < in_nx && 0 <= ns && ns < in_ny){
+                tmp[m + n * out_nx] =  src[ms + ns * in_nx];
+            }
+            else{
+                tmp = 0;
+            }
+        }
+    }
+    if (src == dst){
+		src.reset();
+	}
+    dst = std::move(tmp);
+}
+
 }
 #endif
