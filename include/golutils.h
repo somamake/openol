@@ -385,7 +385,9 @@ __global__ void NearestNeighborInterpolation(_Tp* src, _Tp* dst,int64_t in_ny, i
 
 	float dstx = m / xscale; 
 	float dsty = n / yscale;
-	int64_t ms = round(dstx); int64_t ns = round(dsty);
+	// int64_t ms = round(dstx); int64_t ns = round(dsty);
+	int64_t ms = (dstx + 0.0001f); int64_t ns = (dsty + 0.0001f);
+	// int64_t ms = (dstx); int64_t ns = (dsty);
     if(0 <= ms && ms < in_nx && 0 <= ns && ns < in_ny){
         dst[m + n * out_nx] =  src[ms + ns * in_nx];
 		// dst = 0;
@@ -413,55 +415,125 @@ void NearestNeighborInterpolation(cuda::unique_ptr<_Tp[]>& src, cuda::unique_ptr
 	}
     dst = std::move(tmp);
 }
-// srcとdstのサイズは整数倍でなくてよい
-// template<typename _Tp>
-// __global__ void AreaAverageKernel(_Tp* src, _Tp* dst,int64_t in_ny, int64_t in_nx,
-// 				int64_t out_ny,int64_t out_nx){
+template<typename _Tp>
+__global__ void AreaAverageKernel(_Tp* src, _Tp* dst,int64_t in_ny, int64_t in_nx,int64_t out_ny,int64_t out_nx,float yscale,float xscale,float S){
+    int m = blockIdx.x*blockDim.x + threadIdx.x;
+    int n = blockIdx.y*blockDim.y + threadIdx.y;
+    if (m >= out_nx || n >= out_ny){
+        return;
+    }
+    float src_x = m * xscale; 
+    float src_y = n * yscale;
+    int src_m = floor(src_x);
+    int src_n = floor(src_y);
+    _Tp sum = 0;
+    int window_m = (int)(src_x + xscale + 0.9999f) - src_m;
+    int window_n = (int)(src_y + yscale + 0.9999f) - src_n;
+    float lyl = (src_n + 1) - src_y;
+    float lyr = (src_y + yscale) - (src_n + window_n - 1);
+    float lxl = (src_m + 1) - src_x;
+    float lxr = (src_x + xscale) -(src_m + window_m - 1);
+    for (int local_n = 0; local_n < window_n;local_n++){
+        float ly = 1.f;
+        if (local_n == 0){
+            ly = lyl;
+        }
+        else if (local_n == window_n - 1){
+            ly = lyr;
+        }
+        
+        for (int local_m = 0; local_m < window_m;local_m++){
+            float lx = 1;
+            if (local_m == 0){
+                lx = lxl;
+            }
+            else if (local_m == window_m - 1){
+                lx = lxr;
+            }
+            int in_n = local_n + src_n;
+            int in_m = local_m + src_m;
+            if (in_n >= in_ny || in_n < 0 || in_m >= in_nx || in_m < 0){
+                break;
+            }
+            int64_t in_idx = in_n * in_nx + in_m;
+            sum += src[in_idx] * lx * ly;
+        }
+    }
+    dst[n * out_nx + m] = sum / S;
+}
 
-// 	int m = blockIdx.x*blockDim.x + threadIdx.x;
-//     int n = blockIdx.y*blockDim.y + threadIdx.y;
-// 	if (m >= out_nx || n >= out_ny){
-// 		return;
-// 	}
-//     float xscale = (float)out_nx / in_nx;
-//     float yscale = (float)out_ny / in_ny; 
+template<typename _Tp>
+__global__ void AreaAverageKernel(_Tp* src, _Tp* dst,int64_t in_ny, int64_t in_nx,int64_t out_ny,int64_t out_nx){
+    int m = blockIdx.x*blockDim.x + threadIdx.x;
+    int n = blockIdx.y*blockDim.y + threadIdx.y;
+    if (m >= out_nx || n >= out_ny){
+        return;
+    }
+    float xscale = (float)in_nx / out_nx;
+    float yscale = (float)in_ny / out_ny; 
+    float S = xscale * yscale;
+    float src_x = m * xscale; 
+    float src_y = n * yscale;
+    int src_m = floor(src_x);
+    int src_n = floor(src_y);
+    _Tp sum = 0;
+    int window_m = (int)(src_x + xscale + 0.9999f) - src_m;
+    int window_n = (int)(src_y + yscale + 0.9999f) - src_n;
+    float lyl = (src_n + 1) - src_y;
+    float lyr = (src_y + yscale) - (src_n + window_n - 1);
+    float lxl = (src_m + 1) - src_x;
+    float lxr = (src_x + xscale) -(src_m + window_m - 1);
+    for (int local_n = 0; local_n < window_n;local_n++){
+        float ly = 1.f;
+        if (local_n == 0){
+            ly = lyl;
+        }
+        else if (local_n == window_n - 1){
+            ly = lyr;
+        }
+        
+        for (int local_m = 0; local_m < window_m;local_m++){
+            float lx = 1;
+            if (local_m == 0){
+                lx = lxl;
+            }
+            else if (local_m == window_m - 1){
+                lx = lxr;
+            }
+            int in_n = local_n + src_n;
+            int in_m = local_m + src_m;
+            if (in_n >= in_ny || in_n < 0 || in_m >= in_nx || in_m < 0){
+                break;
+            }
+            int64_t in_idx = in_n * in_nx + in_m;
+            sum += src[in_idx] * lx * ly;
+        }
+    }
+    dst[n * out_nx + m] = sum / S;
+}
 
-// 	float dstx = m / xscale; 
-// 	float dsty = n / yscale;
-// 	int64_t ms = round(dstx); int64_t ns = round(dsty);
-//     if(0 <= ms && ms < in_nx && 0 <= ns && ns < in_ny){
-// 		_Tp sum = 0;
-// 		for (int local_h = 0;local_h < filter_ny;local_h++){
-// 			for (int local_w = 0;local_w < filter_nx;local_w++){
-// 				sum += src[(w * filter_nx + local_w)+ (h * filter_ny + local_h)* in_nx];
-// 			}
-// 		}
-// 		dst[w + h * out_nx] = sum / (filter_ny * filter_nx);
-// 		// dst = 0;
-//     }
-//     else{
-//         dst = 0;
-//     }
-// }
-
-// template<typename _Tp>
-// void AreaAverage(cuda::unique_ptr<_Tp[]>& src, cuda::unique_ptr<_Tp[]>& dst,int64_t in_ny, int64_t in_nx,int64_t out_ny,int64_t out_nx){
-//     cuda::unique_ptr<_Tp[]> tmp;
-//     if (src == dst || (void*)dst.get() == NULL ){
-// 		tmp = cuda::make_unique<_Tp[]>(out_ny * out_nx);
-// 	}
-// 	else{
-// 		tmp = std::move(dst);
-// 	}
-// 	dim3 block(16, 16, 1);
-// 	dim3 grid(ceil((float)out_nx / block.x), ceil((float)out_ny / block.y), 1);
-// 	AreaAverageKernel<<<grid,block>>>(src.get(),tmp.get(),in_ny,in_nx,out_ny,out_nx);
-    
-//     if (src == dst){
-// 		src.reset();
-// 	}
-//     dst = std::move(tmp);
-// }
+// 面積平均法
+template<typename _Tp>
+void AreaAverage(cuda::unique_ptr<_Tp[]>& src, cuda::unique_ptr<_Tp[]>& dst,int64_t in_ny, int64_t in_nx,int64_t out_ny,int64_t out_nx){
+    cuda::unique_ptr<_Tp[]> tmp;
+    if (src == dst || (void*)dst.get() == NULL ){
+		tmp = cuda::make_unique<_Tp[]>(out_ny * out_nx);
+	}
+	else{
+		tmp = std::move(dst);
+	}
+    float xscale = (float)in_nx / out_nx;
+    float yscale = (float)in_ny / out_ny; 
+    float S = xscale * yscale;
+    dim3 block(16, 16, 1);
+	dim3 grid(ceil((float)out_nx / block.x), ceil((float)out_ny / block.y), 1);
+    AreaAverageKernel<<<grid,block>>>(src.get(),tmp.get(),in_ny,in_nx,out_ny,out_nx,yscale,xscale,S);
+    // AreaAverageKernel<<<grid,block>>>(src.get(),tmp.get(),in_ny,in_nx,out_ny,out_nx);
+    if (src == dst){
+		src.reset();
+	}
+    dst = std::move(tmp);
+}
 
 
 }
