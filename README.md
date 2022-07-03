@@ -80,7 +80,13 @@ OpenMPとCUDAにより並列計算しています。
 	cmake --build .
 	make install
 	```
-
+4. OpenOLのインストール  
+	使用したいディレクトリでgit submoduleを使用することを推奨します。
+	```
+	git submodule add git@github.com:somamake/openol.git openol
+	```
+5. コンパイル  
+	cmakeの使用を推奨します。本レポジトリにあるCMakeLists.txtを参考にしてください。
 # TODO
 - ヘッダーオンリーでコンパイルに時間がかかるので、srcフォルダに分ける。  
   そのためにクラステンプレートの型制限する必要あり。

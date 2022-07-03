@@ -86,8 +86,8 @@ void add( cuda::unique_ptr<thrust::complex<PREC_T>[]>& u1,cuda::unique_ptr<thrus
 	cudaDeviceSynchronize();
 }
 
-template<typename PREC_T=float>
-__global__ void mul_scalar( thrust::complex<PREC_T>* u,PREC_T scalar, int height, int width)
+template<typename COMPLEX_T =float, typename PREC_T=float>
+__global__ void mul_scalar( thrust::complex<COMPLEX_T>* u,PREC_T scalar, int height, int width)
 {
 	//スレッド・ブロック番号を元にアドレス計算
 	int x = blockIdx.x*blockDim.x + threadIdx.x;
@@ -98,8 +98,8 @@ __global__ void mul_scalar( thrust::complex<PREC_T>* u,PREC_T scalar, int height
 	}	
 }
 
-template<typename PREC_T=float>
-void mul_scalar( cuda::unique_ptr<thrust::complex<PREC_T>[]>& u,PREC_T scalar, int height, int width)
+template<typename COMPLEX_T =float,typename PREC_T=float>
+void mul_scalar( cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& u,PREC_T scalar, int height, int width)
 {
 	dim3 block(16, 16, 1);
 	dim3 grid(ceil((float)width / block.x), ceil((float)height / block.y), 1);
@@ -464,8 +464,8 @@ __global__ void AreaAverageKernel(_Tp* src, _Tp* dst,int64_t in_ny, int64_t in_n
 
 template<typename _Tp>
 __global__ void AreaAverageKernel(_Tp* src, _Tp* dst,int64_t in_ny, int64_t in_nx,int64_t out_ny,int64_t out_nx){
-    int m = blockIdx.x*blockDim.x + threadIdx.x;
-    int n = blockIdx.y*blockDim.y + threadIdx.y;
+    int64_t m = blockIdx.x*blockDim.x + threadIdx.x;
+    int64_t n = blockIdx.y*blockDim.y + threadIdx.y;
     if (m >= out_nx || n >= out_ny){
         return;
     }
@@ -474,16 +474,16 @@ __global__ void AreaAverageKernel(_Tp* src, _Tp* dst,int64_t in_ny, int64_t in_n
     float S = xscale * yscale;
     float src_x = m * xscale; 
     float src_y = n * yscale;
-    int src_m = floor(src_x);
-    int src_n = floor(src_y);
+    int64_t src_m = floor(src_x);
+    int64_t src_n = floor(src_y);
     _Tp sum = 0;
-    int window_m = (int)(src_x + xscale + 0.9999f) - src_m;
-    int window_n = (int)(src_y + yscale + 0.9999f) - src_n;
+    int64_t window_m = (int)(src_x + xscale + 0.9999f) - src_m;
+    int64_t window_n = (int)(src_y + yscale + 0.9999f) - src_n;
     float lyl = (src_n + 1) - src_y;
     float lyr = (src_y + yscale) - (src_n + window_n - 1);
     float lxl = (src_m + 1) - src_x;
     float lxr = (src_x + xscale) -(src_m + window_m - 1);
-    for (int local_n = 0; local_n < window_n;local_n++){
+    for (int64_t local_n = 0; local_n < window_n;local_n++){
         float ly = 1.f;
         if (local_n == 0){
             ly = lyl;
@@ -492,7 +492,7 @@ __global__ void AreaAverageKernel(_Tp* src, _Tp* dst,int64_t in_ny, int64_t in_n
             ly = lyr;
         }
         
-        for (int local_m = 0; local_m < window_m;local_m++){
+        for (int64_t local_m = 0; local_m < window_m;local_m++){
             float lx = 1;
             if (local_m == 0){
                 lx = lxl;
@@ -500,8 +500,8 @@ __global__ void AreaAverageKernel(_Tp* src, _Tp* dst,int64_t in_ny, int64_t in_n
             else if (local_m == window_m - 1){
                 lx = lxr;
             }
-            int in_n = local_n + src_n;
-            int in_m = local_m + src_m;
+            int64_t in_n = local_n + src_n;
+            int64_t in_m = local_m + src_m;
             if (in_n >= in_ny || in_n < 0 || in_m >= in_nx || in_m < 0){
                 break;
             }

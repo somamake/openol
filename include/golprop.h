@@ -126,14 +126,12 @@ void gFresnelProp(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& u,
                 int ny, int nx,PREC_T dy, PREC_T dx, PREC_T lambda, PREC_T d){
 	int ny2 = ny * 2;
 	int nx2 = nx * 2;
-	// int mem_size = sizeof(cufftComplex) * ny2 * nx2; 
 	auto buf1 = cuda::make_unique<thrust::complex<COMPLEX_T>[]>(ny2 * nx2);
 	auto buf2 = cuda::make_unique<thrust::complex<COMPLEX_T>[]>(ny2 * nx2);
 
 	dim3 block(16, 16, 1);
 	dim3 grid(ceil((float)nx2 / block.x), ceil((float)ny2 / block.y), 1);
 	//開口面a(x,y)のフーリエ変換
-	// gzeropadding<<< grid, block >>>(u.get(),buf1.get(),ny,nx);
 	gzeropadding(u,buf1,ny,nx,ny2,nx2);
 	cudaDeviceSynchronize();
 	cufftHandle fftplan;
@@ -141,7 +139,6 @@ void gFresnelProp(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& u,
 	cufftExecC2C(fftplan, (cufftComplex*)buf1.get(), (cufftComplex*)buf1.get(), CUFFT_FORWARD);
 	mul_scalar<<<grid,block>>>(buf1.get(),(COMPLEX_T) (1.0f / (ny2 * nx2)),ny2,nx2);
 	//p(x,y)を算出
-    // gFresnelResponseFFTShift<<< grid, block >>>(buf2.get(),ny2,nx2,dy,dx,lambda,d);
 	gFresnelResponse<<< grid, block >>>(buf2.get(),ny2,nx2,dy,dx,lambda,d);
 	gfftshift(buf2,ny2,nx2);
 	cudaDeviceSynchronize();
@@ -150,10 +147,8 @@ void gFresnelProp(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& u,
 	mul_scalar<<<grid,block>>>(buf2.get(),(COMPLEX_T) (1.0f / (ny2 * nx2)),ny2,nx2);
 	//複素乗算
 	KernelMult<<< grid, block>>>(buf1.get(), buf2.get(), buf1.get(), ny2, nx2);
-	// gfftshift(buf1,ny2,nx2);
 	//逆FFT
 	cufftExecC2C(fftplan, (cufftComplex*)buf1.get(), (cufftComplex*)buf1.get(), CUFFT_INVERSE);
-	// gfftshift(buf1,ny2,nx2);
 	
 	gdel_zero<<< grid, block >>>(buf1.get(),u.get(),ny2,nx2);
 	grid = dim3(ceil((float)nx / block.x), ceil((float)ny / block.y), 1);
