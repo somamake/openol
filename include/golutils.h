@@ -66,6 +66,16 @@ __global__ void KernelMult( thrust::complex<PREC_T>* a, thrust::complex<PREC_T>*
 }
 
 template<typename PREC_T>
+void mult(cuda::unique_ptr<thrust::complex<PREC_T>[]>& a, cuda::unique_ptr<thrust::complex<PREC_T>[]>& b,cuda::unique_ptr<thrust::complex<PREC_T>[]>& c,
+	int height, int width)
+{
+	dim3 block(16, 16, 1);
+	dim3 grid(ceil((float)width / block.x), ceil((float)height / block.y), 1);
+	KernelMult<<<grid,block>>>(a.get(),b.get(),c.get(),height,width);
+	cudaDeviceSynchronize();
+}
+
+template<typename PREC_T>
 __global__ void KernelAdd( thrust::complex<PREC_T>* a, thrust::complex<PREC_T>*b, thrust::complex<PREC_T>*c, int height, int width)
 {
 	//スレッド・ブロック番号を元にアドレス計算

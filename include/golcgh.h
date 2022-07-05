@@ -538,6 +538,27 @@ void WRPMethod_D(gObject<_Tp>& obj,cuda::unique_ptr<thrust::complex<COMPLEX_T>[]
 }
 
 template<typename _Tp,typename COMPLEX_T,typename PREC_T>
+void WRPMethod_D(gObject<_Tp>& obj,cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& U,int ny, int nx,PREC_T p, PREC_T lambda,PREC_T zmin,PREC_T p_limit,float s=0.9,PROPMODE propmode=PROPMODE::AUTO){
+    // cudaMemset(U.get(),0,sizeof(thrust::complex<COMPLEX_T>) * ny *nx);
+    dim3 block(16,16,1);
+    dim3 grid(ceil((float) nx / block.x),ceil((float) ny / block.y), 1);
+    float plane_z;
+    if (s < 0){
+        float D = nx * p * 0.05;
+        float d =  (sqrt(4 * std::pow((p_limit / lambda),2) - 1 )) / sqrt(2) * D;
+        // PREC_T W = 1 / (sqrt(4 * std::pow((p / lambda),2) - 1 )) * (points[j].z - z)
+        plane_z =  zmin - d;
+    }
+    else{
+        plane_z = zmin * s;
+    }
+    printf("plane z is %f, ratio is %f\n",plane_z, plane_z / zmin);
+    WRPStep1_D(obj,U,ny,nx,p,lambda,plane_z,p_limit);
+    // Save(PROJECT_ROOT "/out/tmp.bmp",U,ny,nx);
+    WRPStep2(U,ny,nx,p,lambda,plane_z,propmode);
+}
+
+template<typename _Tp,typename COMPLEX_T,typename PREC_T>
 void WRPMethod(gObject<_Tp>& obj,cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& U,int ny, int nx,PREC_T p, PREC_T lambda,PREC_T zmin,float s=0.9,PROPMODE propmode=PROPMODE::AUTO){
     // cudaMemset(U.get(),0,sizeof(thrust::complex<COMPLEX_T>) * ny *nx);
     dim3 block(16,16,1);

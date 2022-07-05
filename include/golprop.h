@@ -201,6 +201,24 @@ void gFresnelResponseBandLimit(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& h
     
 }
 
+template<typename PREC_T,typename COMPLEX_T>
+void gFresnelResponseBandLimit(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& h,size_t ny, size_t nx,
+                    PREC_T dy,PREC_T dx, PREC_T lambda, PREC_T z,PREC_T p_limit)
+{
+    PREC_T xlim;
+    int wlim;
+    xlim = abs(lambda * z * 0.5 / p_limit);
+    // ylim = abs(lambda * z * 0.5 / dy);
+    wlim = floor (xlim / dx);
+    // hlim = floor (ylim / dy);
+	dim3 block(16, 16, 1);
+	dim3 grid(ceil((float)nx / block.x), ceil((float)ny / block.y), 1);
+	gFresnelResponseBandLimit<<<grid,block>>>(h.get(),ny,nx,dy,dx,lambda,z,wlim);
+	cudaDeviceSynchronize();
+    
+}
+
+
 // u is device data before zero padding
 template<typename COMPLEX_T,typename PREC_T>
 void gFresnelPropBandLimit(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& u,
