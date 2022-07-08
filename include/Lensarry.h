@@ -9,7 +9,7 @@
 #include "memory"
 #include <random>
 
-
+#ifdef __NVCC__
 template<typename PREC_T=float>
 __global__ void gduplicate(thrust::complex<PREC_T>* ublock,thrust::complex<PREC_T>* ulens,int blockpx,int height,int width,int on,int om){
     int local_m = blockIdx.x * blockDim.x + threadIdx.x;
@@ -34,6 +34,7 @@ __global__ void gduplicate(thrust::complex<PREC_T>* ublock,thrust::complex<PREC_
         }
     }
 }
+#endif
 
 namespace ol{
 
@@ -48,7 +49,9 @@ class Lensarry{
         float blockwidth;
         int blockpx;
         std::unique_ptr<std::complex<_Tp>[]> u;
+        #ifdef __NVCC__
         cuda::unique_ptr<thrust::complex<_Tp>[]> du;
+        #endif
         ol::HOLOGRAMSTEP step = ol::HOLOGRAMSTEP::PLAY;
         Lensarry(int height, int width, float pitch,float blockwidth,float f,float lambda){
             this->pitch = pitch;

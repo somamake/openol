@@ -19,34 +19,34 @@
 #pragma pack(1)
 typedef struct tagBITMAPFILEHEADER
 {
-	unsigned short bfType; //ファイルタイプ
-	unsigned int  bfSize; //ファイルサイズ
-	unsigned short bfReserved1; //予約領域1
-	unsigned short bfReserved2;  //予約領域2
-	unsigned int  bfOffBits; //
+	uint16_t bfType; //ファイルタイプ
+	uint32_t  bfSize; //ファイルサイズ
+	uint16_t bfReserved1; //予約領域1
+	uint16_t bfReserved2;  //予約領域2
+	uint32_t  bfOffBits; //
 }BITMAPFILEHEADER;
 
 typedef struct tagBITMAPINFOHEADER 
 {
-	unsigned int   biSize;//ヘッダサイズ
-	int		    biWidth;//画像の幅(px)
-	int		biHeight;//画像の高さ(px)
-	unsigned short  biPlanes;//プレーン数
-	unsigned short  biBitCount;//1画素あたりデータサイズ
-	unsigned int   biCompression;//圧縮形式
-	unsigned int   biSizeImage;//画像データ部のサイズ 0で最大を意味する?
-	int		biXPelsPerMeter;//横方向解像度(dot/m)
-	int		biYPelsPerMeter;//縦方向解像度(dot/m)
-	unsigned int   biClrUsed;//格納されているパレット数
-	unsigned int   biClrImportant;//重要なパレットのインデックス 0で全て重要
+	uint32_t   biSize;//ヘッダサイズ
+	int32_t		    biWidth;//画像の幅(px)
+	int32_t		biHeight;//画像の高さ(px)
+	uint16_t  biPlanes;//プレーン数
+	uint16_t  biBitCount;//1画素あたりデータサイズ
+	uint32_t   biCompression;//圧縮形式
+	uint32_t   biSizeImage;//画像データ部のサイズ 0で最大を意味する?
+	int32_t		biXPelsPerMeter;//横方向解像度(dot/m)
+	int32_t		biYPelsPerMeter;//縦方向解像度(dot/m)
+	uint32_t   biClrUsed;//格納されているパレット数
+	uint32_t   biClrImportant;//重要なパレットのインデックス 0で全て重要
 }BITMAPINFOHEADER;
 
 typedef struct tagRGBQUAD
 {
-	unsigned char  rgbBlue;//青0~255
-	unsigned char  rgbGreen;//緑0~255
-	unsigned char  rgbRed;//赤0~255
-	unsigned char  rgbReserved;//予約領域
+	uint8_t  rgbBlue;//青0~255
+	uint8_t  rgbGreen;//緑0~255
+	uint8_t  rgbRed;//赤0~255
+	uint8_t  rgbReserved;//予約領域
 }RGBQUAD;
 #pragma pack()
 
@@ -87,8 +87,37 @@ void bmpread(const char *fname,uint8_t *img,int ny,int nx){
 	}
 }
 
+
+
+
+// opencv
+template<typename T>
+std::unique_ptr<T[]> cvMat2sptr(cv::Mat mat){
+    std::unique_ptr<uint8_t[]> sptr;
+    int height = mat.rows; int width = mat.cols;
+    sptr = std::make_unique<uint8_t[]>(height * width);
+    // if (mat.isContinuous()){
+        for(int h = 0;h < height;h++){
+            for (int w = 0;w < width;w++){
+                sptr[h * width + w] = mat.at<T>(h,w);
+            }
+        }
+        mat.release();
+    // }
+    // else{
+    //     printf("cannot convert mat to smart ptr");
+    //     exit(1);
+    // }
+    return sptr;
+}
+void imread(const char *fname,std::unique_ptr<uint8_t[]>& img,int ny,int nx){
+    auto tmp = cv::imread(fname);
+    cv::flip(tmp, tmp, 0);
+    cv::cvtColor(tmp,tmp,cv::COLOR_BGR2GRAY);
+    img = std::move(ol::cvMat2sptr<uint8_t>(tmp));
+}
 void bmpread(const char *fname,std::unique_ptr<uint8_t[]>& img,int ny,int nx){
-    bmpread(fname,img.get(),ny,nx);
+    imread(fname,img,ny,nx);
 }
 
 // bmp write
@@ -382,14 +411,25 @@ void Save(const char* path,std::unique_ptr<std::complex<COMPLEX_T>[]>& u,int hei
         MODE savemode = MODE::PHASE){
     auto imgtmp = std::make_unique<uint8_t[]>(width * height);
     ol::complex2img(u,imgtmp,height,width,savemode);
-    bmpwrite(path,imgtmp,height,width);
+    const char *ext = strrchr(path, '.');
+    if (strcmp(".bmp", ext) == 0)
+        imwrite(path,imgtmp,height,width);
+    else{
+        imwrite(path,imgtmp,height,width);
+    }
+    
 }
 
 void Save(const char* path,std::unique_ptr<float[]>& real,int64_t ny, int64_t nx,
         MODE savemode = MODE::PHASE){
     auto img = std::make_unique<uint8_t[]>(ny * nx);
     ol::quant8bit(real,img,ny,nx);
-    bmpwrite(path,img,ny,nx);
+     const char *ext = strrchr(path, '.');
+    if (strcmp(".bmp", ext) == 0)
+        imwrite(path,img,ny,nx);
+    else{
+        imwrite(path,img,ny,nx);
+    }
 }
 
 #ifdef __NVCC__
@@ -402,26 +442,7 @@ void Save(const char* path,cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& u,int
 }
 #endif
 
-// opencv
-template<typename T>
-std::unique_ptr<T[]> cvMat2sptr(cv::Mat mat){
-    std::unique_ptr<uint8_t[]> sptr;
-    int height = mat.rows; int width = mat.cols;
-    sptr = std::make_unique<uint8_t[]>(height * width);
-    // if (mat.isContinuous()){
-        for(int h = 0;h < height;h++){
-            for (int w = 0;w < width;w++){
-                sptr[h * width + w] = mat.at<T>(h,w);
-            }
-        }
-        mat.release();
-    // }
-    // else{
-    //     printf("cannot convert mat to smart ptr");
-    //     exit(1);
-    // }
-    return sptr;
-}
+
 
 }
 #endif
