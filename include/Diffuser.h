@@ -128,6 +128,36 @@ __global__ void Kernelbitphase( thrust::complex<_Tp>* in, int height, int width)
     }
 }
 
+template<typename _Tp = float>
+__global__ void shift( _Tp* in,  _Tp* out,int height, int width,int oy,int ox)
+{
+	//スレッド・ブロック番号を元にアドレス計算
+	int w = blockIdx.x*blockDim.x + threadIdx.x;
+    int h = blockIdx.y*blockDim.y + threadIdx.y;
+	if ( w >= width&& h >= height){
+        return;
+    }
+    int _h = (h + oy) % height;
+    int _w = (w + ox) % width;
+    _h = (_h >= 0) ? _h : _h + height;
+    _w = (_w >= 0) ? _w : _w + width;
+    int _idx = _h * width + _w;
+    int idx = w + h * width;
+    // _Tp tmp = in[idx];
+    // in[idx] = in[_idx];
+    out[_idx] = in[idx];
+}
+
+template<typename _Tp = float>
+void shift( cuda::unique_ptr<_Tp[]>& in, int height, int width,int oy,int ox){
+    auto tmp = cuda::make_unique<_Tp[]>(height * width);
+    dim3 block(16,16,1);
+    dim3 grid(ceil((float) (width / 2) / block.x), ceil((float) (height / 2) / block.y),1);
+    shift<<<grid,block>>>(in.get(),tmp.get(),height,width,oy,ox);
+    cudaDeviceSynchronize();
+    in = std::move(tmp);
+}
+
 #define CUDA_CALL(x) do { if((x)!=cudaSuccess) { \
     printf("Error at %s:%d\n",__FILE__,__LINE__);\
     exit(1);}} while(0)
@@ -194,13 +224,14 @@ class Diffuser{
         }
         #ifdef __NVCC__
         template<typename PREC_T>
-        void random_phase(cuda::unique_ptr<thrust::complex<PREC_T>[]>& u,HOLOGRAMSTEP step,int seed = 1,float range= 2*M_PI){
+        void random_phase(cuda::unique_ptr<thrust::complex<PREC_T>[]>& u,HOLOGRAMSTEP step,int seed = 1,float range= 2*M_PI,int oy = 0, int ox = 0){
             curandGenerator_t gen;
             cuda::unique_ptr<PREC_T[]> devData = cuda::make_unique<float[]>(height * width);
 
             CURAND_CALL(curandCreateGenerator(&gen,CURAND_RNG_PSEUDO_MT19937));
             curandSetPseudoRandomGeneratorSeed(gen,seed);
             curandGenerateUniform(gen,devData.get(),height * width);
+            shift(devData,this->height,this->width,oy,ox);
             dim3 block(16,16,1);
             dim3 grid(ceil((float)width / block.x), ceil((float)height / block.y),1);
             if (step == PLAY){
