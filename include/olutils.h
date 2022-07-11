@@ -155,13 +155,15 @@ void zeropadding(std::unique_ptr<std::complex<PREC_T>[]>& in,std::unique_ptr<std
 template<typename _Tp>
 void zeropadding(std::unique_ptr<_Tp[]>& src, std::unique_ptr<_Tp[]>& dst,
                 int64_t in_height, int64_t in_width,int64_t out_height,int64_t out_width){
-    int64_t ypadsize = (out_height - in_height) / 2;
-    int64_t xpadsize = (out_width - in_width) / 2;
+    int64_t ypadsize_l = (out_height - in_height) / 2;
+    int64_t xpadsize_l = (out_width - in_width) / 2;
+    int64_t ypadsize_r = (out_height - in_height + 1) / 2;
+    int64_t xpadsize_r = (out_width - in_width + 1) / 2;
     auto tmp = std::make_unique<_Tp[]>(out_height * out_width);
     for (int64_t h = 0;h < out_height;h++){
         for (int64_t w = 0;w < out_width;w++){
-            if ( ypadsize <= h && h < (out_height - ypadsize) && xpadsize <= w && w < (out_width - xpadsize) ){
-                tmp[h * out_width + w] = src[(h - ypadsize) * in_width + w - xpadsize];
+            if ( ypadsize_l <= h && h < (out_height - ypadsize_r) && xpadsize_l <= w && w < (out_width - xpadsize_r) ){
+                tmp[h * out_width + w] = src[(h - ypadsize_l) * in_width + w - xpadsize_l];
             }
             else{
                 tmp[h * out_width + w] = 0;
@@ -365,7 +367,7 @@ void NearestNeighborInterpolation(std::unique_ptr<_Tp[]>& src, std::unique_ptr<_
                 tmp[m + n * out_nx] =  src[ms + ns * in_nx];
             }
             else{
-                tmp = 0;
+                tmp[m + n * out_nx] = 0;
             }
         }
     }

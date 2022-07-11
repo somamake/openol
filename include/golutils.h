@@ -143,10 +143,12 @@ __global__ void gzeropadding(_Tp* src, _Tp* dst,
 	int w = blockIdx.x*blockDim.x + threadIdx.x;
     int h = blockIdx.y*blockDim.y + threadIdx.y;
 	if(w < out_width && h < out_height){
-		int ypadsize = (out_height - in_height) / 2;
-    	int xpadsize = (out_width - in_width) / 2;
-		if ( ypadsize <= h && h < (out_height - ypadsize) && xpadsize <= w && w < (out_width - xpadsize) ){
-                dst[h * out_width + w] = src[(h - ypadsize) * in_width + w - xpadsize];
+		int64_t ypadsize_l = (out_height - in_height) / 2;
+		int64_t xpadsize_l = (out_width - in_width) / 2;
+		int64_t ypadsize_r = (out_height - in_height + 1) / 2;
+		int64_t xpadsize_r = (out_width - in_width + 1) / 2;
+		if ( ypadsize_l <= h && h < (out_height - ypadsize_r) && xpadsize_l <= w && w < (out_width - xpadsize_r) ){
+                dst[h * out_width + w] = src[(h - ypadsize_l) * in_width + w - xpadsize_l];
 		}
 		else{
 			dst[h * out_width + w] = 0;
@@ -395,8 +397,8 @@ __global__ void NearestNeighborInterpolation(_Tp* src, _Tp* dst,int64_t in_ny, i
 
 	float dstx = m / xscale; 
 	float dsty = n / yscale;
-	// int64_t ms = round(dstx); int64_t ns = round(dsty);
-	int64_t ms = (dstx + 0.0001f); int64_t ns = (dsty + 0.0001f);
+	int64_t ms = round(dstx); int64_t ns = round(dsty);
+	// int64_t ms = (dstx + 0.0001f); int64_t ns = (dsty + 0.0001f);
 	// int64_t ms = (dstx); int64_t ns = (dsty);
     if(0 <= ms && ms < in_nx && 0 <= ns && ns < in_ny){
         dst[m + n * out_nx] =  src[ms + ns * in_nx];
