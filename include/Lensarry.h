@@ -63,6 +63,16 @@ __global__ void gduplicateCircleKernel(thrust::complex<PREC_T>* ublock,thrust::c
         }
     }
 }
+
+template<typename _Tp>
+__global__ void gInitKernel(_Tp* u,int height,int width,_Tp val){
+    int m = blockIdx.x * blockDim.x + threadIdx.x;
+    int n = blockIdx.y * blockDim.y + threadIdx.y;
+    if (m >= width || n >= height){
+        return;
+    }
+    u[m + n * width] = val;
+}
 #endif
 
 namespace ol{
@@ -349,10 +359,8 @@ void Lensarry<PREC_T>::shift(int oy,int ox){
 template<typename PREC_T>
 cuda::unique_ptr<thrust::complex<PREC_T>[]> Lensarry<PREC_T>::gduplicate(cuda::unique_ptr<thrust::complex<PREC_T>[]>& ublock,int on,int om){
     auto u_lens = cuda::make_unique<thrust::complex<PREC_T>[]>(this->height * this->width);
-    
-    
     dim3 block(16, 16, 1);
-    dim3 grid(ceil((float)this->blockpx / block.x), ceil((float)this->blockpx / block.y), 1);
+    dim3 grid(ceil((float)this->blockpx / block.x), ceil((float)this->blockpx / block.y), 1);    
     gduplicateKernel<<<grid,block>>>(ublock.get(),u_lens.get(),this->blockpx,height,width,on,om);
     cudaDeviceSynchronize();
     return u_lens;
@@ -424,7 +432,7 @@ std::unique_ptr<std::complex<PREC_T>[]> LensarryCircle<PREC_T>::duplicate(std::u
     int stepm = round(stepx / this->pitch); 
     for (int64_t n = 0;n < this->height;n++){
         for (int64_t m = 0;m < this->width;m++){
-            u_lens[n * this->width + m] = 1.0f;
+            u_lens[n * this->width + m] = std::complex<PREC_T>(1.0f,0);
         }
     }
     for (int block_n = 0;block_n < this->height;block_n+=stepn){
@@ -462,9 +470,13 @@ cuda::unique_ptr<thrust::complex<PREC_T>[]> LensarryCircle<PREC_T>::gduplicate(c
     float stepx = this->blockwidth;
     float r = this->blockwidth * 0.5f;
     int stepn = round(stepy / this->pitch);
-    int stepm = round(stepx / this->pitch); 
+    int stepm = round(stepx / this->pitch);
+    thrust::complex<PREC_T> val = 1;
     dim3 block(16, 16, 1);
-    dim3 grid(ceil((float)this->blockpx / block.x), ceil((float)this->blockpx / block.y), 1);
+    dim3 grid(ceil((float)this->width / block.x), ceil((float)this->height / block.y), 1);
+    gInitKernel<<<grid,block>>>(u_lens.get(),this->height,this->width,val);
+    cudaDeviceSynchronize();
+    grid.x = ceil((float)this->blockpx / block.x); grid.y =  ceil((float)this->blockpx / block.y);
     gduplicateCircleKernel<<<grid,block>>>(ublock.get(),u_lens.get(),this->blockpx,this->height,this->width,this->pitch,r,stepn,stepm,on,om);
     cudaDeviceSynchronize();
     return u_lens;
