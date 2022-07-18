@@ -10,6 +10,73 @@
 #include "olimg.h"
 
 namespace ol{
+
+class gFFT{
+	public:
+	cufftHandle fftplan;
+	int64_t ny,nx;
+	bool flag = false;
+	~gFFT(){
+		cufftDestroy(fftplan);
+	}
+	void set(int64_t ny, int64_t nx){
+		this->ny = ny;
+		this->nx = nx;
+		cufftPlan2d(&fftplan, ny, nx, CUFFT_C2C);
+		flag = true;
+	}
+	gFFT(int64_t ny, int64_t nx){
+		set(ny,nx);
+	}
+	void fft(cuda::unique_ptr<thrust::complex<float>[]>& src,cuda::unique_ptr<thrust::complex<float>[]>& dst){
+		if (flag == true){
+			cufftComplex* _src = reinterpret_cast<cufftComplex*>(src.get());
+			cufftComplex* _dst = reinterpret_cast<cufftComplex*>(dst.get());
+			cufftExecC2C(fftplan, _src, _dst, CUFFT_FORWARD);
+		}
+		else{
+			printf("plan not set\n");
+		}
+		
+	}
+	void ifft(cuda::unique_ptr<thrust::complex<float>[]>& src,cuda::unique_ptr<thrust::complex<float>[]>& dst){
+		if (flag == true){
+			cufftComplex* _src = reinterpret_cast<cufftComplex*>(src.get());
+			cufftComplex* _dst = reinterpret_cast<cufftComplex*>(dst.get());
+			cufftExecC2C(fftplan, _src, _dst, CUFFT_INVERSE);
+		}
+		else{
+			printf("plan not set\n");
+		}
+		
+	}
+};
+
+template<typename PREC_T>
+void fft(cuda::unique_ptr<thrust::complex<PREC_T>[]>& src,cuda::unique_ptr<thrust::complex<PREC_T>[]>& dst, int64_t ny, int64_t nx)
+{
+    cufftHandle fftplan;
+	cufftPlan2d(&fftplan, ny, nx, CUFFT_C2C);
+	cufftComplex* _src = reinterpret_cast<cufftComplex*>(src.get());
+	cufftComplex* _dst = reinterpret_cast<cufftComplex*>(dst.get());
+	cufftExecC2C(fftplan, _src, _dst, CUFFT_FORWARD);
+	cufftDestroy(fftplan);
+}
+
+template<typename PREC_T>
+void ifft(cuda::unique_ptr<thrust::complex<PREC_T>[]>& src,cuda::unique_ptr<thrust::complex<PREC_T>[]>& dst, int64_t ny, int64_t nx)
+{
+    cufftHandle fftplan;
+	cufftPlan2d(&fftplan, ny, nx, CUFFT_C2C);
+	cufftComplex* _src = reinterpret_cast<cufftComplex*>(src.get());
+	cufftComplex* _dst = reinterpret_cast<cufftComplex*>(dst.get());
+	cufftExecC2C(fftplan, _src, _dst, CUFFT_INVERSE);
+	cufftDestroy(fftplan);
+}
+
+
+
+
 template<typename PREC_T>
 __global__ void gfftshift(thrust::complex<PREC_T>* u, int ny, int nx){
 	int w = blockIdx.x*blockDim.x + threadIdx.x;
@@ -190,6 +257,24 @@ __global__ void gdel_zero(thrust::complex<PREC_T>* in,thrust::complex<PREC_T>* o
 			out[w - in_width/4 + (h - in_height/4) * in_width/2] = in[w + h * in_width];
 		}
 	}
+}
+template<typename _Tp>
+void gdel_zero(cuda::unique_ptr<_Tp[]>& src, cuda::unique_ptr<_Tp[]>& dst,int ny, int nx){
+	cuda::unique_ptr<_Tp[]> tmp;
+	if (src == dst || (void*)dst.get() == NULL ){
+		tmp = cuda::make_unique<_Tp[]>((ny /2) * (nx / 2));
+	}
+	else{
+		tmp = std::move(dst);
+	}
+	dim3 block(16, 16, 1);
+	dim3 grid(ceil((float)nx / block.x), ceil((float)ny / block.y), 1);
+    gdel_zero<<<grid,block>>>(src.get(),tmp.get(),ny,nx);
+	if (src == dst){
+		src.reset();
+	}
+    dst = std::move(tmp);
+	cudaDeviceSynchronize();
 }
 
 

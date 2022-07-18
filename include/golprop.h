@@ -75,40 +75,44 @@ void gFresnelProp(std::unique_ptr<std::complex<COMPLEX_T>[]>& u,
 	int mem_size = sizeof(cufftComplex) * ny2 * nx2; 
 	auto h_buf = std::make_unique<std::complex<COMPLEX_T>[]>(ny2 * nx2);
 
-	// cufftComplex* d_buf1, *d_buf2, *d_buf3;
-	thrust::complex<COMPLEX_T>* d_buf1, *d_buf2, *d_buf3; 
+	cufftComplex* d_buf1, *d_buf2;
+	// thrust::complex<COMPLEX_T>* d_buf1, *d_buf2, *d_buf3; 
 	cudaMalloc( (void**) &d_buf1, mem_size);
 	cudaMalloc( (void**) &d_buf2, mem_size);
-	cudaMalloc( (void**) &d_buf3, mem_size);
+	// cudaMalloc( (void**) &d_buf3, mem_size);
 	ol::zeropadding(u,h_buf,ny,nx);
     ol::fftshift(h_buf,ny2,nx2);
 
     cudaMemcpy( d_buf1, h_buf.get(), mem_size,cudaMemcpyHostToDevice);  
 
-	//開口面a(x,y)のフーリエ変換
 	cufftHandle fftplan;
 	cufftPlan2d(&fftplan, ny2, nx2, CUFFT_C2C);
-	cufftExecC2C(fftplan, (cufftComplex*)d_buf1, (cufftComplex*)d_buf2, CUFFT_FORWARD);
+	cufftExecC2C(fftplan, d_buf1, d_buf1, CUFFT_FORWARD);
 
-	//p(x,y)を算出
     ol::FresnelResponse(h_buf,ny2,nx2,dy,dx,lambda,d);
-	ol::fftshift(h_buf, ny2, nx2);  //象限の交換
-	//p(x,y)のFFT
-    cudaMemcpy( d_buf3, h_buf.get(), mem_size,cudaMemcpyHostToDevice);  
-	cufftExecC2C(fftplan, (cufftComplex*)d_buf3, (cufftComplex*)d_buf1, CUFFT_FORWARD);
+	ol::fftshift(h_buf, ny2, nx2);
+    cudaMemcpy( d_buf2, h_buf.get(), mem_size,cudaMemcpyHostToDevice);
 
-	//複素乗算
+	// ol::NearestNeighborInterpolation(h_buf,u,ny2,nx2,ny,nx);
+	// ol::Save(PROJECT_ROOT "/out/tmp1.bmp",u,ny,nx,ol::PHASE);
+	// printf("save\n");
+
+	// auto h_buf = std::make_unique<std::complex<COMPLEX_T>[]>(ny * nx);
+	// cudaMemcpy( h_buf.get(), d_buf3, mem_size,cudaMemcpyDeviceToHost);
+	// ol::NearestNeighborInterpolation(h_buf,u,ny2,nx2,ny,nx);
+	// ol::Save(PROJECT_ROOT "/out/tmp.bmp",u,ny,nx,ol::PHASE);
+	// printf("save\n");
+
+
+	cufftExecC2C(fftplan, d_buf2, d_buf2, CUFFT_FORWARD);
+
 	dim3 block(16, 16, 1);
 	dim3 grid(ceil((float)nx2 / block.x), ceil((float)ny2 / block.y), 1);
-	// KernelMult<<< grid, block>>>((cufftComplex*)d_buf2, (cufftComplex*)d_buf1, (cufftComplex*)d_buf3, nx2, ny2);
-	KernelMult<<< grid, block>>>(d_buf2, d_buf1, d_buf3, ny2, nx2);
+	KernelMult<<< grid, block>>>(d_buf1, d_buf2, d_buf1, ny2, nx2);
 
-	//逆FFT
-	cufftExecC2C(fftplan, (cufftComplex*)d_buf3,(cufftComplex*) d_buf1, CUFFT_INVERSE);
+	cufftExecC2C(fftplan, d_buf1, d_buf1, CUFFT_INVERSE);
 
-	//計算結果を転送
 	cudaMemcpy( h_buf.get(), d_buf1, mem_size,cudaMemcpyDeviceToHost);
-	//結果をビットマップファイルとして保存
     ol::fftshift(h_buf,ny2,nx2);
 
 	ol::del_zero(h_buf,u,ny2,nx2);
@@ -116,11 +120,50 @@ void gFresnelProp(std::unique_ptr<std::complex<COMPLEX_T>[]>& u,
 	cufftDestroy(fftplan);
 	cudaFree(d_buf1);
 	cudaFree(d_buf2);
-	cudaFree(d_buf3);
 	h_buf.reset();
 }
 
 // u is device data before zero padding
+// template<typename COMPLEX_T,typename PREC_T>
+// void gFresnelProp(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& u,
+//                 int ny, int nx,PREC_T dy, PREC_T dx, PREC_T lambda, PREC_T d){
+// 	int ny2 = ny * 2;
+// 	int nx2 = nx * 2;
+// 	auto buf1 = cuda::make_unique<thrust::complex<COMPLEX_T>[]>(ny2 * nx2);
+// 	auto buf2 = cuda::make_unique<thrust::complex<COMPLEX_T>[]>(ny2 * nx2);
+
+// 	dim3 block(16, 16, 1);
+// 	dim3 grid(ceil((float)nx2 / block.x), ceil((float)ny2 / block.y), 1);
+// 	//開口面a(x,y)のフーリエ変換
+// 	gzeropadding(u,buf1,ny,nx,ny2,nx2);
+// 	cudaDeviceSynchronize();
+// 	cufftHandle fftplan;
+// 	cufftPlan2d(&fftplan, ny2, nx2, CUFFT_C2C);
+// 	cufftExecC2C(fftplan, (cufftComplex*)buf1.get(), (cufftComplex*)buf1.get(), CUFFT_FORWARD);
+// 	mul_scalar<<<grid,block>>>(buf1.get(),(COMPLEX_T) (1.0f / (ny2 * nx2)),ny2,nx2);
+// 	//p(x,y)を算出
+// 	gFresnelResponse<<< grid, block >>>(buf2.get(),ny2,nx2,dy,dx,lambda,d);
+// 	gfftshift(buf2,ny2,nx2);
+// 	cudaDeviceSynchronize();
+// 	//p(x,y)のFFT
+// 	cufftExecC2C(fftplan, (cufftComplex*)buf2.get(), (cufftComplex*)buf2.get(), CUFFT_FORWARD);
+// 	mul_scalar<<<grid,block>>>(buf2.get(),(COMPLEX_T) (1.0f / (ny2 * nx2)),ny2,nx2);
+// 	//複素乗算
+// 	KernelMult<<< grid, block>>>(buf1.get(), buf2.get(), buf1.get(), ny2, nx2);
+// 	//逆FFT
+// 	cufftExecC2C(fftplan, (cufftComplex*)buf1.get(), (cufftComplex*)buf1.get(), CUFFT_INVERSE);
+	
+// 	gdel_zero<<< grid, block >>>(buf1.get(),u.get(),ny2,nx2);
+// 	grid = dim3(ceil((float)nx / block.x), ceil((float)ny / block.y), 1);
+// 	// mul_scalar<<<grid,block>>>(u.get(),(COMPLEX_T) (1.0f / (ny2 * nx2 * d)),ny,nx);
+// 	cudaDeviceSynchronize();
+// 	//開放
+// 	cufftDestroy(fftplan);
+// 	buf1.reset();
+// 	buf2.reset();
+// 	cudaDeviceSynchronize();
+// }
+
 template<typename COMPLEX_T,typename PREC_T>
 void gFresnelProp(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& u,
                 int ny, int nx,PREC_T dy, PREC_T dx, PREC_T lambda, PREC_T d){
@@ -128,37 +171,30 @@ void gFresnelProp(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& u,
 	int nx2 = nx * 2;
 	auto buf1 = cuda::make_unique<thrust::complex<COMPLEX_T>[]>(ny2 * nx2);
 	auto buf2 = cuda::make_unique<thrust::complex<COMPLEX_T>[]>(ny2 * nx2);
+	ol::gFFT fft(ny2,nx2);
 
-	dim3 block(16, 16, 1);
-	dim3 grid(ceil((float)nx2 / block.x), ceil((float)ny2 / block.y), 1);
-	//開口面a(x,y)のフーリエ変換
 	gzeropadding(u,buf1,ny,nx,ny2,nx2);
-	cudaDeviceSynchronize();
-	cufftHandle fftplan;
-	cufftPlan2d(&fftplan, ny2, nx2, CUFFT_C2C);
-	cufftExecC2C(fftplan, (cufftComplex*)buf1.get(), (cufftComplex*)buf1.get(), CUFFT_FORWARD);
-	mul_scalar<<<grid,block>>>(buf1.get(),(COMPLEX_T) (1.0f / (ny2 * nx2)),ny2,nx2);
-	//p(x,y)を算出
-	gFresnelResponse<<< grid, block >>>(buf2.get(),ny2,nx2,dy,dx,lambda,d);
+
+	fft.fft(buf1,buf1);
+	mul_scalar(buf1,(COMPLEX_T) (1.0f / (ny2 * nx2)),ny2,nx2);
+	// ol::NearestNeighborInterpolation(buf1,u,ny2,nx2,ny,nx);
+	// ol::Save(PROJECT_ROOT "/out/tmp.bmp",u,ny,nx,ol::AMP);
+	// printf("save\n");
+
+	gFresnelResponse(buf2,ny2,nx2,dy,dx,lambda,d);
 	gfftshift(buf2,ny2,nx2);
-	cudaDeviceSynchronize();
-	//p(x,y)のFFT
-	cufftExecC2C(fftplan, (cufftComplex*)buf2.get(), (cufftComplex*)buf2.get(), CUFFT_FORWARD);
-	mul_scalar<<<grid,block>>>(buf2.get(),(COMPLEX_T) (1.0f / (ny2 * nx2)),ny2,nx2);
-	//複素乗算
-	KernelMult<<< grid, block>>>(buf1.get(), buf2.get(), buf1.get(), ny2, nx2);
-	//逆FFT
-	cufftExecC2C(fftplan, (cufftComplex*)buf1.get(), (cufftComplex*)buf1.get(), CUFFT_INVERSE);
-	
-	gdel_zero<<< grid, block >>>(buf1.get(),u.get(),ny2,nx2);
-	grid = dim3(ceil((float)nx / block.x), ceil((float)ny / block.y), 1);
-	// mul_scalar<<<grid,block>>>(u.get(),(COMPLEX_T) (1.0f / (ny2 * nx2 * d)),ny,nx);
-	cudaDeviceSynchronize();
-	//開放
-	cufftDestroy(fftplan);
+	fft.fft(buf2,buf2);
+	mul_scalar(buf2,(COMPLEX_T) (1.0f / (ny2 * nx2)),ny2,nx2);
+	// ol::NearestNeighborInterpolation(buf2,u,ny2,nx2,ny,nx);
+	// ol::Save(PROJECT_ROOT "/out/tmp.bmp",u,ny,nx,ol::PHASE);
+	// printf("save\n");
+
+	mult(buf1, buf2, buf1, ny2, nx2);
+
+	fft.ifft(buf1,buf1);
+	gdel_zero(buf1,u,ny2,nx2);
 	buf1.reset();
 	buf2.reset();
-	cudaDeviceSynchronize();
 }
 
 
@@ -428,48 +464,42 @@ void gAsmProp(std::unique_ptr<std::complex<COMPLEX_T>[]>& u,int ny,int nx, PREC_
     PREC_T dv = 1 / (dy * ny2);
 	auto h_buf = std::make_unique<std::complex<COMPLEX_T>[]>(ny2 * nx2);
 
-	dim3 block(32, 32, 1);
+	dim3 block(16, 16, 1);
 	dim3 grid(ceil((float)nx2 / block.x), ceil((float)ny2 / block.y), 1);
 
-	cufftComplex* d_buf1, *d_buf2, *d_buf3; 
+	cufftComplex* d_buf1, *d_buf2; 
 	cudaMalloc( (void**) &d_buf1, mem_size);
 	cudaMalloc( (void**) &d_buf2, mem_size);
-	cudaMalloc( (void**) &d_buf3, mem_size);
+	// cudaMalloc( (void**) &d_buf3, mem_size);
 	ol::zeropadding(u,h_buf,ny,nx);
-    // ol::fftshift(h_buf,ny2,nx2);
 
-	//開口面a(x,y)のフーリエ変換
 	cufftHandle fftplan;
 	cufftPlan2d(&fftplan, ny2, nx2, CUFFT_C2C);
 	cudaMemcpy( d_buf1, h_buf.get(), mem_size,cudaMemcpyHostToDevice);  
 	cufftExecC2C(fftplan, d_buf1, d_buf2, CUFFT_FORWARD);
 
-    ol::AsmTransferF(h_buf,dv,du,ny2,nx2,lambda,d);
+    ol::AsmTransferF(h_buf,ny2,nx2,dv,du,lambda,d);
     ol::fftshift(h_buf,ny2,nx2);
-	// auto imgtmp = std::make_unique<uint8_t[]>(ny2 * nx2);
-    // ol::complex2img(h_buf,imgtmp,ny2,nx2,true);
-    // bmpwrite(PROJECT_ROOT "/out/tmp.bmp",imgtmp,ny2,nx2);
-    // imgtmp.reset();
 
     cudaMemcpy( d_buf1, h_buf.get(), mem_size,cudaMemcpyHostToDevice);  
 
-	//複素乗算
-	KernelMult<<< grid, block>>>(d_buf2, d_buf1, d_buf3, ny2, nx2);
+	KernelMult<<< grid, block>>>(d_buf2, d_buf1, d_buf2, ny2, nx2);
 
-	//逆FFT
-	cufftExecC2C(fftplan, d_buf3, d_buf1, CUFFT_INVERSE);
+	cudaMemcpy( h_buf.get(), d_buf2, mem_size,cudaMemcpyDeviceToHost);
+	// ol::NearestNeighborInterpolation(h_buf,u,ny2,nx2,ny,nx);
+	// ol::Save(PROJECT_ROOT "/out/tmp.bmp",u,ny,nx,ol::AMP);
+	// printf("save\n");
 
-	//計算結果を転送
+
+	cufftExecC2C(fftplan, d_buf2, d_buf1, CUFFT_INVERSE);
+
 	cudaMemcpy( h_buf.get(), d_buf1, mem_size,cudaMemcpyDeviceToHost);
-	//結果をビットマップファイルとして保存
-    // ol::fftshift(h_buf,ny2,nx2);
 
 	ol::del_zero(h_buf,u,ny2,nx2);
-	//開放
 	cufftDestroy(fftplan);
 	cudaFree(d_buf1);
 	cudaFree(d_buf2);
-	cudaFree(d_buf3);
+	// cudaFree(d_buf3);
 	h_buf.reset();
 }
 
@@ -477,42 +507,30 @@ void gAsmProp(std::unique_ptr<std::complex<COMPLEX_T>[]>& u,int ny,int nx, PREC_
 template<typename COMPLEX_T,typename PREC_T>
 void gAsmProp(cuda::unique_ptr<thrust::complex<COMPLEX_T>[]>& u,
                 int ny, int nx,PREC_T dy, PREC_T dx, PREC_T lambda, PREC_T d){
-	int ny2 = ny * 2;
-	int nx2 = nx * 2;
+	int64_t ny2 = ny * 2;
+	int64_t nx2 = nx * 2;
 	PREC_T du = 1 / (dx * nx2);
     PREC_T dv = 1 / (dy * ny2);
-	// int mem_size = sizeof(cufftComplex) * ny2 * nx2; 
 	auto buf1 = cuda::make_unique<thrust::complex<COMPLEX_T>[]>(ny2 * nx2);
 	auto buf2 = cuda::make_unique<thrust::complex<COMPLEX_T>[]>(ny2 * nx2);
+	ol::gFFT fft(ny2,nx2);
+	gzeropadding(u,buf1,ny,nx,ny2,nx2);
 
-	dim3 block(16, 16, 1);
-	dim3 grid(ceil((float)nx2 / block.x), ceil((float)ny2 / block.y), 1);
-	//開口面a(x,y)のフーリエ変換
-	cudaDeviceSynchronize();
-	gzeropadding<<< grid, block >>>(u.get(),buf1.get(),ny,nx);
-	cudaDeviceSynchronize();
-	cufftHandle fftplan;
-	cufftPlan2d(&fftplan, ny2, nx2, CUFFT_C2C);
-	cufftExecC2C(fftplan, (cufftComplex*)buf1.get(), (cufftComplex*)buf1.get(), CUFFT_FORWARD);
-	// mul_scalar<<<grid,block>>>(buf1.get(),(COMPLEX_T) (1.0f / (ny2 * nx2)),ny2,nx2);
+	// ol::NearestNeighborInterpolation(buf2,u,ny2,nx2,ny,nx);
+	// ol::Save(PROJECT_ROOT "/out/tmp.bmp",u,ny,nx,ol::AMP);
+	// printf("save\n");
 
-	//H(u,v)を算出
-    gAsmTransferF<<< grid, block >>>(buf2.get(),ny2,nx2,dv,du,lambda,d);
+	fft.fft(buf1,buf1);
+	mul_scalar(buf1,(COMPLEX_T)(1.0f / (ny2 * nx2)),ny2,nx2);
+	
+
+    gAsmTransferF(buf2,ny2,nx2,dv,du,lambda,d);
 	gfftshift(buf2,ny2,nx2);
-	cudaDeviceSynchronize();
-	//複素乗算
-	KernelMult<<< grid, block>>>(buf1.get(), buf2.get(), buf1.get(), ny2, nx2);
-	//逆FFT
-	cufftExecC2C(fftplan, (cufftComplex*)buf1.get(), (cufftComplex*)buf1.get(), CUFFT_INVERSE);
-	cudaDeviceSynchronize();
-	gdel_zero<<< grid, block >>>(buf1.get(),u.get(),ny2,nx2);
-	grid = dim3(ceil((float)nx / block.x), ceil((float)ny / block.y), 1);
-	mul_scalar<<<grid,block>>>(u.get(),(COMPLEX_T)(1.0f / (ny2 * nx2)),ny,nx);
-	cudaDeviceSynchronize();
-	//開放
-	cufftDestroy(fftplan);
-	buf1.reset();
-	buf2.reset();
+	
+	mult(buf1, buf2, buf1, ny2, nx2);
+	
+	fft.ifft(buf1,buf1);
+	gcut(buf1,u,ny2,nx2,(ny2 - ny)/2,(nx2 - nx)/2,ny,nx);
 }
 
 // u is device data before zero padding
