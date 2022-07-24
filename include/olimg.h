@@ -77,13 +77,24 @@ void bmpread(const char *fname,uint8_t *img,int ny,int nx){
         perror("fread");
         exit(1);
     }
-	for(int n=0;n<ny;n++){
-		for(int m=0;m<nx;m++){
-			if ( fread(&img[m+n*nx],1,1,fp) < 1){
-                perror("fread");
-                exit(1);
-            }
-		}
+	// for(int n=0;n<ny;n++){
+	// 	for(int m=0;m<nx;m++){
+	// 		if ( fread(&img[m+n*nx],1,1,fp) < 1){
+    //             perror("fread");
+    //             exit(1);
+    //         }
+	// 	}
+	// }
+    int32_t padsize = nx % 4;
+    for(int n=0;n<ny;n++){
+        if ( fread(&img[n*nx],sizeof(uint8_t),nx,fp) < 1){
+            perror("fread");
+            exit(1);
+        }
+        if ( fseek(fp,sizeof(uint8_t) * padsize,SEEK_CUR) != 0){
+            perror("fread");
+            exit(1);
+        }
 	}
 }
 
@@ -118,6 +129,7 @@ void imread(const char *fname,std::unique_ptr<uint8_t[]>& img,int ny,int nx){
 }
 void bmpread(const char *fname,std::unique_ptr<uint8_t[]>& img,int ny,int nx){
     imread(fname,img,ny,nx);
+    bmpread(fname,img.get(),ny,nx);
 }
 
 // bmp write
@@ -139,7 +151,16 @@ void bmpwrite(const char *fname,uint8_t *img,int ny,int nx){
     fwrite(&BFH,sizeof(BITMAPFILEHEADER),1,fp);
     fwrite(&BIH,sizeof(BITMAPINFOHEADER),1,fp);
     fwrite(RGB,sizeof(RGB),1,fp);
-    fwrite(img,nx*ny,1,fp);
+    // fwrite(img,nx*ny,1,fp);
+    int32_t padsize = nx % 4;
+    uint8_t* zeros = new uint8_t[padsize];
+    for (int i = 0;i < padsize;i++){
+        zeros[i] = 0;
+    }
+    for(int32_t n = 0; n < ny;n++){
+        fwrite(img + n * nx,sizeof(uint8_t),nx,fp);
+        fwrite(zeros,sizeof(uint8_t),padsize,fp);
+    }
     fclose(fp);
 }
 
@@ -413,7 +434,7 @@ void Save(const char* path,std::unique_ptr<std::complex<COMPLEX_T>[]>& u,int hei
     ol::complex2img(u,imgtmp,height,width,savemode);
     const char *ext = strrchr(path, '.');
     if (strcmp(".bmp", ext) == 0)
-        imwrite(path,imgtmp,height,width);
+        bmpwrite(path,imgtmp,height,width);
     else{
         imwrite(path,imgtmp,height,width);
     }
@@ -426,7 +447,7 @@ void Save(const char* path,std::unique_ptr<float[]>& real,int64_t ny, int64_t nx
     ol::quant8bit(real,img,ny,nx);
      const char *ext = strrchr(path, '.');
     if (strcmp(".bmp", ext) == 0)
-        imwrite(path,img,ny,nx);
+        bmpwrite(path,img,ny,nx);
     else{
         imwrite(path,img,ny,nx);
     }
